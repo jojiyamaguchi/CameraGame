@@ -206,9 +206,9 @@
 
     <div id="difficulty-selection-screen">
         <h2>難易度選択</h2>
-        <button id="easy-button" data-difficulty="easy">EASY (カメラ2個)</button>
-        <button id="normal-button" data-difficulty="normal">NORMAL (カメラ4個)</button>
-        <button id="hard-button" data-difficulty="hard">HARD (カメラ9個)</button>
+        <button id="easy-button" data-difficulty="easy">初級(時給2万円)</button>
+        <button id="normal-button" data-difficulty="normal">中級(時給20万円)</button>
+        <button id="hard-button" data-difficulty="hard">上級(時給200万円)</button>
     </div>
 
     <div id="game-container">
@@ -274,6 +274,7 @@
         let animationFrameId; // アニメーションフレームIDを保持
         let numCameras; // 現在の難易度でのカメラ数
         let isPrologueActive = true; // プロローグ表示中フラグ
+        let selectedDifficulty = 'easy'; // 選択された難易度を保持 ('easy', 'normal', 'hard')
 
         // HSLカラー文字列をパースして数値に変換
         function parseHslString(hslString) {
@@ -1082,15 +1083,52 @@
             }
         }
 
+        // エピローグテキストを返す関数
+        function getEpilogueText(type, difficulty, lifeRemaining) {
+            let text = "";
+            if (type === 'gameOver') {
+                if (difficulty === 'easy') {
+                    text = "翌朝、画面の前で冷たくなっているあなたが発見された。";
+                } else if (difficulty === 'normal') {
+                    text = "翌朝、画面の前には目から血を流しているあなたが発見された。駆け付けた医者は何も言わず首を振った。";
+                } else if (difficulty === 'hard') {
+                    text = "画面の前には黒い灰の山があった。ただそれだけだった。";
+                }
+            } else if (type === 'gameClear') {
+                if (difficulty === 'easy') {
+                    if (lifeRemaining <= 25) {
+                        text = "あなたは16万円を握りしめて家に帰った。そしてベッドに倒れこむように寝て、二度と起きなかった。";
+                    } else { // lifeRemaining >= 26
+                        text = "あなたは16万円を握りしめて家に帰った。こんなに楽に稼げるなら、中級に挑戦してもいいかもな！";
+                    }
+                } else if (difficulty === 'normal') {
+                    if (lifeRemaining <= 25) {
+                        text = "あなたは160万円を握りしめて家に帰った。ドアを開けると恋人あなたを見て「あなた…誰ですか？」と言った。あなたも自分が誰だか分らなかった。";
+                    } else { // lifeRemaining >= 26
+                        text = "これで借金が返せる…。あなたはほっとした気分だった。だが、すぐにもっと欲が出る…。";
+                    }
+                } else if (difficulty === 'hard') {
+                    if (lifeRemaining <= 25) {
+                        text = "あなたは1600万円のアタッシュケースを持って事務所を出た。帰り道でケースを開け、ムシャムシャと札束を食べてしまった。";
+                    } else { // lifeRemaining >= 26
+                        text = "あなたは1600万円の大金を得た。だが、あなたが得たものはその大金よりも大きい。揺るぎない自信を胸に、あなたは町を歩く。人ごみの中、時折悪魔のような姿が見えた。あなたは醜い人の心を見抜く真実の眼を手に入れたようだ。";
+                    }
+                }
+            }
+            return text;
+        }
+
         // ゲーム終了画面の表示
         function displayGameEndScreen(type) {
             cancelAnimationFrame(animationFrameId); // アニメーションを停止
 
+            const epilogueText = getEpilogueText(type, selectedDifficulty, currentLife); // エピローグテキストを取得
+
             const screen = document.createElement('div');
             screen.className = type === 'gameOver' ? 'game-over-screen' : 'game-clear-screen';
             screen.innerHTML = `
-                <h2>${type === 'gameOver' ? 'GAME OVER' : 'MISSION CLEAR!'}<br></h2>
-                <p>${type === 'gameOver' ? 'ライフがなくなりました。' : `残りライフ ${currentLife} でミッションをクリアしました！`}<br></p>
+                <h2>${type === 'gameOver' ? 'GAME OVER' : 'MISSION CLEAR!'}</h2>
+                <p>${epilogueText}</p>
                 <button class="play-again-button">もう一度プレイする</button>
             `;
             document.body.appendChild(screen);
@@ -1221,7 +1259,7 @@
                         drawCameraView(); // 異変解消後、再描画
                     } else {
                         loseLife(1, "それは異変ではない。ライフ-1。");
-                    }
+                    }S
                 }
             }
         });
@@ -1236,18 +1274,21 @@
         // 難易度ボタンのイベントリスナー設定
         document.getElementById('easy-button').addEventListener('click', () => {
             numCameras = NUM_CAMERAS_EASY;
+            selectedDifficulty = 'easy'; // 難易度を設定
             rulesCameraSwitchInfo.innerHTML = `<strong>スペースキー:</strong> 監視カメラを切り替えます (1 → 2 → ... → ${numCameras} → 1)。`;
             startGame();
         });
 
         document.getElementById('normal-button').addEventListener('click', () => {
             numCameras = NUM_CAMERAS_NORMAL;
+            selectedDifficulty = 'normal'; // 難易度を設定
             rulesCameraSwitchInfo.innerHTML = `<strong>スペースキー:</strong> 監視カメラを切り替えます (1 → 2 → ... → ${numCameras} → 1)。`;
             startGame();
         });
 
         document.getElementById('hard-button').addEventListener('click', () => {
             numCameras = NUM_CAMERAS_HARD;
+            selectedDifficulty = 'hard'; // 難易度を設定
             rulesCameraSwitchInfo.innerHTML = `<strong>スペースキー:</strong> 監視カメラを切り替えます (1 → 2 → ... → ${numCameras} → 1)。`;
             startGame();
         });
