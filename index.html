@@ -1,0 +1,658 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>監視カメラの怪異ゲーム</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #222;
+            color: #eee;
+            margin: 0;
+            padding: 20px;
+        }
+        #game-container {
+            border: 2px solid #555;
+            background-color: #333;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 0 15px rgba(0, 255, 0, 0.3);
+            text-align: center;
+            margin-bottom: 20px;
+            display: none; /* 初期は非表示 */
+        }
+        #camera-info, #game-stats {
+            margin-bottom: 10px;
+            font-size: 1.2em;
+            color: #0f0;
+        }
+        canvas {
+            background-color: #000;
+            border: 2px solid #0f0;
+            display: block;
+            margin: 0 auto 15px auto;
+        }
+        #message-area {
+            font-size: 1.1em;
+            color: #ff0;
+            min-height: 2em;
+            margin-bottom: 15px;
+        }
+        #rules-container {
+            background-color: #1a1a1a;
+            border: 1px solid #444;
+            padding: 15px;
+            border-radius: 5px;
+            text-align: left;
+            width: 800px;
+            max-width: 90%;
+            font-size: 0.9em;
+            line-height: 1.6;
+        }
+        #rules-container h3 {
+            color: #0f0;
+            margin-top: 0;
+            border-bottom: 1px dashed #444;
+            padding-bottom: 5px;
+            margin-bottom: 10px;
+        }
+        .game-over-screen, .game-clear-screen, #difficulty-selection-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.9);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            color: #fff;
+            font-size: 2em;
+            text-align: center;
+        }
+        .game-over-screen h2 { color: #f00; }
+        .game-clear-screen h2 { color: #0f0; }
+        #difficulty-selection-screen h2 { color: #0ff; margin-bottom: 40px; }
+        .play-again-button, #difficulty-selection-screen button {
+            padding: 15px 30px;
+            font-size: 1.2em;
+            margin: 10px;
+            cursor: pointer;
+            background-color: #0a0;
+            color: #fff;
+            border: none;
+            border-radius: 5px;
+            transition: background-color 0.3s ease;
+        }
+        .play-again-button:hover, #difficulty-selection-screen button:hover {
+            background-color: #0c0;
+        }
+    </style>
+</head>
+<body>
+    <div id="difficulty-selection-screen">
+        <h2>難易度選択</h2>
+        <button id="easy-button" data-difficulty="easy">EASY (カメラ2個)</button>
+        <button id="normal-button" data-difficulty="normal">NORMAL (カメラ4個)</button>
+        <button id="hard-button" data-difficulty="hard">HARD (カメラ9個)</button>
+    </div>
+
+    <div id="game-container">
+        <div id="camera-info">監視カメラ 1</div>
+        <div id="game-stats">ライフ: 20 | ターン: 1</div>
+        <canvas id="gameCanvas" width="800" height="600"></canvas>
+        <div id="message-area"></div>
+    </div>
+
+    <div id="rules-container">
+        <h3>操作説明とルール</h3>
+        <ul>
+            <li id="rules-camera-switch-info"><strong>スペースキー:</strong> 監視カメラを切り替えます (1 → 2 → ... → 9 → 1)。</li>
+            <li><strong>マウスでクリック:</strong> 異変を見つけたらクリックしてください。</li>
+            <li><strong>確認ダイアログ:</strong> クリック後、「これが異変ですか？Y/N」と表示されます。Yを選ぶと判定、Nを選ぶと何もしません。</li>
+            <li><strong>誤認:</strong> 異変ではない場所をクリックするとライフが 1 減ります。</li>
+            <li><strong>見逃し:</strong> 異変のあるカメラを切り替えてしまうと、ライフが 5 減ります。</li>
+            <li><strong>異変の累積:</strong> 異変は発見されない限り残り続け、同じカメラに複数の異変が発生することもあります。</li>
+            <li><strong>ゲームオーバー:</strong> ライフが 0 になるとゲームオーバーです。</li>
+            <li><strong>ゲームクリア:</strong> 10 ターン目を終えるとゲームクリアです。</li>
+        </ul>
+    </div>
+
+    <script>
+        const CANVAS_WIDTH = 800;
+        const CANVAS_HEIGHT = 600;
+        const INITIAL_LIFE = 20; // 初期ライフ
+        const MAX_TURNS = 10;    // 最大ターン数
+
+        const ANOMALY_CHANCE_PER_ROOM = 0.3; // 異変発生確率 (部屋表示2回目以降)
+        const ABNORMAL_OBJECT_CHANCE = 0.1; // 異変の種類として異常オブジェクトが追加される確率
+
+        // 難易度ごとのカメラ数
+        const NUM_CAMERAS_EASY = 2;
+        const NUM_CAMERAS_NORMAL = 4;
+        const NUM_CAMERAS_HARD = 9;
+
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const cameraInfoDiv = document.getElementById('camera-info');
+        const gameStatsDiv = document.getElementById('game-stats');
+        const messageAreaDiv = document.getElementById('message-area');
+        const gameContainer = document.getElementById('game-container');
+        const difficultySelectionScreen = document.getElementById('difficulty-selection-screen');
+        const rulesCameraSwitchInfo = document.getElementById('rules-camera-switch-info');
+
+        let currentLife = INITIAL_LIFE;
+        let currentTurn = 1;
+        let currentCameraIndex = 0; // 0-(numCameras-1) (カメラ1-numCamerasに対応)
+        let rooms = []; // 各部屋の状態を保持
+        let gameOver = false;
+        let gameClear = false;
+        let animationFrameId; // アニメーションフレームIDを保持
+        let numCameras; // 現在の難易度でのカメラ数
+
+        // オブジェクトの基本定義
+        const OBJECT_TYPES = [
+            { name: "テーブル", draw: (ctx, obj) => { ctx.rect(obj.x, obj.y + obj.height * 0.2, obj.width, obj.height * 0.8); ctx.rect(obj.x + obj.width * 0.1, obj.y, obj.width * 0.8, obj.height * 0.2); } },
+            { name: "椅子", draw: (ctx, obj) => { ctx.rect(obj.x, obj.y, obj.width, obj.height); ctx.rect(obj.x + obj.width * 0.1, obj.y - obj.height * 0.3, obj.width * 0.8, obj.height * 0.3); } },
+            { name: "花瓶", draw: (ctx, obj) => { ctx.beginPath(); ctx.moveTo(obj.x + obj.width / 2, obj.y); ctx.lineTo(obj.x + obj.width * 0.1, obj.y + obj.height); ctx.lineTo(obj.x + obj.width * 0.9, obj.y + obj.height); ctx.closePath(); } },
+            { name: "積み木", draw: (ctx, obj) => { ctx.rect(obj.x, obj.y, obj.width, obj.height); } },
+            { name: "ボール", draw: (ctx, obj) => { ctx.arc(obj.x + obj.width / 2, obj.y + obj.height / 2, obj.width / 2, 0, Math.PI * 2); } },
+            { name: "ベッド", draw: (ctx, obj) => { ctx.rect(obj.x, obj.y, obj.width, obj.height); ctx.rect(obj.x + obj.width * 0.05, obj.y + obj.height * 0.05, obj.width * 0.9, obj.height * 0.9); } },
+            { name: "男の人", draw: (ctx, obj) => { ctx.beginPath(); ctx.arc(obj.x + obj.width / 2, obj.y + obj.height * 0.2, obj.width * 0.3, 0, Math.PI * 2); ctx.rect(obj.x + obj.width * 0.3, obj.y + obj.height * 0.35, obj.width * 0.4, obj.height * 0.65); } },
+            { name: "女の人", draw: (ctx, obj) => { ctx.beginPath(); ctx.arc(obj.x + obj.width / 2, obj.y + obj.height * 0.2, obj.width * 0.3, 0, Math.PI * 2); ctx.moveTo(obj.x + obj.width * 0.3, obj.y + obj.height * 0.35); ctx.lineTo(obj.x + obj.width * 0.1, obj.y + obj.height); ctx.lineTo(obj.x + obj.width * 0.9, obj.y + obj.height); ctx.lineTo(obj.x + obj.width * 0.7, obj.y + obj.height * 0.35); ctx.closePath(); } },
+            { name: "子ども", draw: (ctx, obj) => { ctx.beginPath(); ctx.arc(obj.x + obj.width / 2, obj.y + obj.height * 0.2, obj.width * 0.25, 0, Math.PI * 2); ctx.rect(obj.x + obj.width * 0.35, obj.y + obj.height * 0.35, obj.width * 0.3, obj.height * 0.65); } },
+        ];
+
+        const ABNORMAL_OBJECT_TYPES = [
+            { name: "赤い男の人", baseType: "男の人", color: "red" },
+            { name: "黒い男の人", baseType: "男の人", color: "black" },
+            { name: "白い男の人", baseType: "男の人", color: "white" },
+            { name: "赤い女の人", baseType: "女の人", color: "red" },
+            { name: "黒い女の人", baseType: "女の人", color: "black" },
+            { name: "白い女の人", baseType: "女の人", color: "white" },
+            { name: "赤い子ども", baseType: "子ども", color: "red" },
+            { name: "黒い子ども", baseType: "子ども", color: "black" },
+            { name: "白い子ども", baseType: "子ども", color: "white" },
+            { name: "血だまり", draw: (ctx, obj) => { ctx.beginPath(); ctx.ellipse(obj.x + obj.width / 2, obj.y + obj.height / 2, obj.width / 2, obj.height / 3, 0, 0, Math.PI * 2); }, color: "darkred" },
+        ];
+
+        let objectIdCounter = 0; // オブジェクトにユニークなIDを割り当てる
+
+        // ゲームの開始 (難易度選択後に呼ばれる)
+        function startGame() {
+            currentLife = INITIAL_LIFE;
+            currentTurn = 1;
+            currentCameraIndex = 0;
+            gameOver = false;
+            gameClear = false;
+            rooms = [];
+            objectIdCounter = 0;
+
+            cancelAnimationFrame(animationFrameId); // 既存のアニメーションがあれば停止
+
+            for (let i = 0; i < numCameras; i++) {
+                rooms.push({
+                    objects: [],
+                    lastViewedTurn: 0, // 最後にこの部屋を見たターン
+                });
+                // 各部屋に初期オブジェクトをランダムに配置
+                const numObjects = Math.floor(Math.random() * 5) + 3; // 3-7個
+                for (let j = 0; j < numObjects; j++) {
+                    createRandomObject(rooms[i].objects, false); // 初期は異変ではない
+                }
+            }
+
+            document.querySelectorAll('.game-over-screen, .game-clear-screen').forEach(el => el.remove());
+            messageAreaDiv.textContent = "";
+            difficultySelectionScreen.style.display = 'none';
+            gameContainer.style.display = 'flex'; // ゲーム画面を表示
+
+            updateGame(); // 最初の描画
+            animateMovingObjects(); // 動くオブジェクトのアニメーションを開始
+        }
+
+        // ランダムなオブジェクトを作成
+        function createRandomObject(objectList, isAnomaly = false, anomalyType = null, baseType = null) {
+            const typeDef = baseType ? OBJECT_TYPES.find(ot => ot.name === baseType) : OBJECT_TYPES[Math.floor(Math.random() * OBJECT_TYPES.length)];
+            const size = Math.random() * 50 + 50; // 50-100px
+            const x = Math.random() * (CANVAS_WIDTH - size);
+            const y = Math.random() * (CANVAS_HEIGHT - size);
+
+            const baseColor = `hsl(${Math.random() * 360}, 70%, 50%)`;
+
+            const newObj = {
+                id: objectIdCounter++,
+                x: x, y: y,
+                width: size, height: size,
+                type: typeDef.name,
+                draw: typeDef.draw,
+                baseColor: baseColor,
+                currentColor: baseColor,
+                baseRotation: 0,
+                currentRotation: 0,
+                baseScale: 1,
+                currentScale: 1,
+                baseAlpha: 1,
+                currentAlpha: 1,
+                vx: 0, vy: 0, // 移動速度
+                isAnomaly: isAnomaly,
+                anomalyType: anomalyType,
+                originalState: null, // 異変前の状態を保存用
+            };
+
+            // 異常オブジェクトの場合、色を上書き
+            if (anomalyType === 'add_abnormal_object') {
+                const abnormalDef = ABNORMAL_OBJECT_TYPES.find(at => at.name === typeDef.name || at.baseType === newObj.type);
+                if (abnormalDef && abnormalDef.color) {
+                    newObj.currentColor = abnormalDef.color;
+                }
+                if (abnormalDef && abnormalDef.draw && abnormalDef.name === newObj.type) { // 血だまりのような特殊な描画
+                    newObj.draw = abnormalDef.draw;
+                }
+            }
+
+            objectList.push(newObj);
+            return newObj;
+        }
+
+        // オブジェクトの描画
+        function drawObject(obj) {
+            ctx.save();
+
+            // 遠近感を計算するためのスケールファクター
+            // Yが0（上端）に近いほど小さく、YがCANVAS_HEIGHT（下端）に近いほど大きくする
+            const minPerspectiveScale = 0.5; // Y=0 の時の最小スケール
+            const maxPerspectiveScale = 1.5; // Y=CANVAS_HEIGHT の時の最大スケール
+
+            // オブジェクトの中心Y座標を正規化 (0.0 から 1.0 の範囲に変換)
+            const centerY = obj.y + obj.height / 2;
+            const normalizedY = Math.max(0, Math.min(1, centerY / CANVAS_HEIGHT)); 
+            
+            // 遠近法によるスケール調整
+            const perspectiveScale = minPerspectiveScale + (maxPerspectiveScale - minPerspectiveScale) * normalizedY;
+
+            // 既存の currentScale と遠近法スケールを組み合わせる
+            const finalScale = obj.currentScale * perspectiveScale;
+
+            ctx.translate(obj.x + obj.width / 2, obj.y + obj.height / 2);
+            ctx.rotate(obj.currentRotation);
+            ctx.scale(finalScale, finalScale); // ここで finalScale を使用
+            ctx.globalAlpha = obj.currentAlpha;
+
+            ctx.fillStyle = obj.currentColor;
+            ctx.strokeStyle = '#333';
+            ctx.lineWidth = 2;
+
+            ctx.beginPath();
+            obj.draw(ctx, { x: -obj.width / 2, y: -obj.height / 2, width: obj.width, height: obj.height });
+            ctx.fill();
+            ctx.stroke();
+
+            // オブジェクト名を描画しない
+            // ctx.fillStyle = '#eee';
+            // ctx.font = '14px Arial';
+            // ctx.textAlign = 'center';
+            // ctx.textBaseline = 'middle';
+            // ctx.fillText(obj.type, 0, 0); // 中心に表示
+
+            ctx.restore();
+        }
+
+        // カメラ映像の描画
+        function drawCameraView() {
+            ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT); // 画面をクリア
+
+            // 背景（少し緑がかった暗い色で監視カメラ風に）
+            ctx.fillStyle = '#1a2a1a';
+            ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+            // ノイズ表現（シンプルな四角で）
+            for(let i = 0; i < 50; i++) {
+                ctx.fillStyle = `rgba(0, 255, 0, ${Math.random() * 0.05})`; // 薄い緑のノイズ
+                ctx.fillRect(Math.random() * CANVAS_WIDTH, Math.random() * CANVAS_HEIGHT, Math.random() * 3, Math.random() * 3);
+            }
+
+            const room = rooms[currentCameraIndex];
+            room.objects.forEach(obj => {
+                drawObject(obj);
+            });
+
+            // 現在のカメラ情報を表示
+            cameraInfoDiv.textContent = `監視カメラ ${currentCameraIndex + 1} / ${numCameras}`;
+            gameStatsDiv.textContent = `ライフ: ${currentLife} | ターン: ${currentTurn}`;
+        }
+
+        // ゲームの状態更新 (ライフ、ターン表示など)
+        function updateGame() {
+            if (gameOver || gameClear) {
+                return;
+            }
+            drawCameraView();
+            // ゲーム終了判定は `checkGameStatus` で行う
+        }
+
+        // 異変の発生判定と作成
+        function maybeCreateAnomaly(room) {
+            // この部屋を初めて見る場合は異変は発生しない
+            if (room.lastViewedTurn === 0) {
+                room.lastViewedTurn = currentTurn;
+                return;
+            }
+
+            // 異変が発生する確率判定
+            if (Math.random() < ANOMALY_CHANCE_PER_ROOM) {
+                createAnomaly(room);
+            }
+            room.lastViewedTurn = currentTurn; // 最後にこの部屋を見たターンを更新
+        }
+
+        // 異変を作成する
+        function createAnomaly(room) {
+            const anomalyTypes = [
+                'transparent', 'add_normal_object', 'move', 'color', 'rotate', 'scale'
+            ];
+            // 低確率で異常オブジェクトを追加
+            if (Math.random() < ABNORMAL_OBJECT_CHANCE) {
+                anomalyTypes.push('add_abnormal_object');
+            }
+
+            const selectedAnomalyType = anomalyTypes[Math.floor(Math.random() * anomalyTypes.length)];
+            let targetObj = null;
+
+            // 既存オブジェクトを対象とする異変の場合
+            if (['transparent', 'move', 'color', 'rotate', 'scale'].includes(selectedAnomalyType)) {
+                // 既存オブジェクトからランダムに1つ選択し、まだ異変でないものを選ぶ
+                const normalObjects = room.objects.filter(obj => !obj.isAnomaly);
+                if (normalObjects.length === 0) {
+                    // 対象オブジェクトがない場合は異変を作成できないので処理を中断するか、別の異変にする
+                    return;
+                }
+                targetObj = normalObjects[Math.floor(Math.random() * normalObjects.length)];
+            }
+
+            // 異変前の状態を保存
+            const originalState = targetObj ? { ...targetObj } : null;
+
+            let newAnomalyObject = null; // 新しく追加される異変オブジェクト用
+
+            switch (selectedAnomalyType) {
+                case 'transparent':
+                    if (targetObj) {
+                        targetObj.currentAlpha = Math.random() * 0.4 + 0.1; // 10% - 50% の透明度
+                    }
+                    break;
+                case 'add_normal_object':
+                    newAnomalyObject = createRandomObject(room.objects, true, 'add_normal_object');
+                    break;
+                case 'add_abnormal_object':
+                    const abnormalDef = ABNORMAL_OBJECT_TYPES[Math.floor(Math.random() * ABNORMAL_OBJECT_TYPES.length)];
+                    
+                    if (abnormalDef.name === "血だまり") { // 血だまりは特殊な描画を持つ
+                         newAnomalyObject = createRandomObject(room.objects, true, 'add_abnormal_object', null);
+                         newAnomalyObject.type = abnormalDef.name;
+                         newAnomalyObject.draw = abnormalDef.draw;
+                         newAnomalyObject.currentColor = abnormalDef.color;
+                    } else { // 通常のオブジェクトベースの異常オブジェクト
+                        newAnomalyObject = createRandomObject(room.objects, true, 'add_abnormal_object', abnormalDef.baseType);
+                        newAnomalyObject.type = abnormalDef.name; // 名前に「赤い男の人」などを反映
+                        newAnomalyObject.currentColor = abnormalDef.color; // 色を上書き
+                    }
+                    break;
+                case 'move':
+                    if (targetObj) {
+                        targetObj.vx = (Math.random() < 0.5 ? 1 : -1) * (Math.random() * 0.5 + 0.1); // 0.1-0.6 px/frame
+                        targetObj.vy = (Math.random() < 0.5 ? 1 : -1) * (Math.random() * 0.5 + 0.1);
+                    }
+                    break;
+                case 'color':
+                    if (targetObj) {
+                        targetObj.currentColor = `hsl(${Math.random() * 360}, 100%, 70%)`; // 派手な色に変更
+                    }
+                    break;
+                case 'rotate':
+                    if (targetObj) {
+                        targetObj.currentRotation = (Math.random() * Math.PI / 2) + Math.PI / 9; // 20度(PI/9)以上回転
+                    }
+                    break;
+                case 'scale':
+                    if (targetObj) {
+                        targetObj.currentScale = Math.random() < 0.5 ? (Math.random() * 0.3 + 0.7) : (Math.random() * 0.7 + 1.3); // 0.7-1.0 or 1.3-2.0
+                    }
+                    break;
+            }
+
+            // 異変フラグを設定
+            const affectedObj = newAnomalyObject || targetObj;
+            if (affectedObj) {
+                affectedObj.isAnomaly = true;
+                affectedObj.anomalyType = selectedAnomalyType;
+                if (originalState) { // 元々あったオブジェクトの場合のみoriginalStateを保存
+                    affectedObj.originalState = originalState;
+                }
+            }
+        }
+
+        // 異変を解消する
+        function resolveAnomaly(obj, room) {
+            if (obj.isAnomaly) {
+                messageAreaDiv.textContent = "異変を発見しました！";
+                obj.isAnomaly = false;
+
+                // 異変の種類に応じて状態を元に戻す
+                if (obj.anomalyType === 'add_normal_object' || obj.anomalyType === 'add_abnormal_object') {
+                    // 追加された異変オブジェクトは削除
+                    room.objects = room.objects.filter(o => o.id !== obj.id);
+                } else if (obj.originalState) {
+                    // 既存オブジェクトの異変は元の状態に戻す
+                    Object.assign(obj, obj.originalState);
+                    obj.originalState = null; // もう不要
+                } else {
+                    // originalStateがない場合 (例: initial objects with anomaly, should not happen based on current logic)
+                    obj.currentAlpha = obj.baseAlpha;
+                    obj.currentColor = obj.baseColor;
+                    obj.currentRotation = obj.baseRotation;
+                    obj.currentScale = obj.baseScale;
+                    obj.vx = 0;
+                    obj.vy = 0;
+                }
+                
+                // その部屋にまだ未発見の異変が残っているかチェック
+                const remainingAnomalies = room.objects.some(o => o.isAnomaly);
+                if (!remainingAnomalies) {
+                    // その部屋の異変が全て解決された
+                }
+            }
+        }
+
+        // ライフを減らす
+        function loseLife(amount, reason) {
+            currentLife -= amount;
+            if (currentLife < 0) currentLife = 0;
+            messageAreaDiv.textContent = reason;
+            checkGameStatus();
+        }
+
+        // ゲームの状態チェック (ゲームオーバー/クリア)
+        function checkGameStatus() {
+            if (currentLife <= 0 && !gameOver) {
+                gameOver = true;
+                displayGameEndScreen("gameOver");
+            } else if (currentTurn > MAX_TURNS && !gameClear) {
+                gameClear = true;
+                displayGameEndScreen("gameClear");
+            }
+        }
+
+        // ゲーム終了画面の表示
+        function displayGameEndScreen(type) {
+            cancelAnimationFrame(animationFrameId); // アニメーションを停止
+
+            const screen = document.createElement('div');
+            screen.className = type === 'gameOver' ? 'game-over-screen' : 'game-clear-screen';
+            screen.innerHTML = `
+                <h2>${type === 'gameOver' ? 'GAME OVER' : 'MISSION CLEAR!'}<
+/h2>
+                <p>${type === 'gameOver' ? 'ライフがなくなりました。' : `残りライフ ${currentLife} でミッションをクリアしました！`}<
+/p>
+                <button class="play-again-button">もう一度プレイする</button>
+            `;
+            document.body.appendChild(screen);
+
+            screen.querySelector('.play-again-button').addEventListener('click', () => {
+                screen.remove();
+                showDifficultySelection(); // 難易度選択画面に戻る
+            });
+        }
+
+        // 移動するオブジェクトのアニメーションループ
+        function animateMovingObjects() {
+            if (gameOver || gameClear) return;
+
+            const room = rooms[currentCameraIndex];
+            room.objects.forEach(obj => {
+                if (obj.anomalyType === 'move') {
+                    obj.x += obj.vx;
+                    obj.y += obj.vy;
+
+                    // 画面枠に触れたら移動方向を反転
+                    if (obj.x < 0 || obj.x + obj.width > CANVAS_WIDTH) {
+                        obj.vx *= -1;
+                        obj.x = Math.max(0, Math.min(CANVAS_WIDTH - obj.width, obj.x)); // 画面内に補正
+                    }
+                    if (obj.y < 0 || obj.y + obj.height > CANVAS_HEIGHT) {
+                        obj.vy *= -1;
+                        obj.y = Math.max(0, Math.min(CANVAS_HEIGHT - obj.height, obj.y)); // 画面内に補正
+                    }
+                }
+            });
+
+            drawCameraView();
+            animationFrameId = requestAnimationFrame(animateMovingObjects);
+        }
+
+        // イベントリスナー
+        document.addEventListener('keydown', (e) => {
+            if (gameOver || gameClear || difficultySelectionScreen.style.display !== 'none') return; // ゲーム中または難易度選択画面表示中のみ反応
+
+            if (e.code === 'Space') {
+                e.preventDefault(); // スクロール防止
+                messageAreaDiv.textContent = ""; // メッセージクリア
+
+                // 前のカメラで異変を見逃していないかチェック
+                const prevCameraRoom = rooms[currentCameraIndex];
+                const unseenAnomalies = prevCameraRoom.objects.filter(obj => obj.isAnomaly);
+                if (unseenAnomalies.length > 0) {
+                    loseLife(5, "異変を見逃した。ライフ-5。");
+                    // ライフを減らした後も、異変は解除されないので次回の確認まで残る
+                }
+
+                currentCameraIndex = (currentCameraIndex + 1) % numCameras; // numCameras に変更
+                if (currentCameraIndex === 0) { // カメラ1に戻ったらターン数増加
+                    currentTurn++;
+                    checkGameStatus(); // ターン終了時のゲームクリア判定
+                }
+
+                // 2回目以降の表示時に異変発生判定
+                maybeCreateAnomaly(rooms[currentCameraIndex]);
+                updateGame();
+            }
+        });
+
+        canvas.addEventListener('click', (e) => {
+            if (gameOver || gameClear || difficultySelectionScreen.style.display !== 'none') return; // ゲーム中または難易度選択画面表示中のみ反応
+
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+
+            const room = rooms[currentCameraIndex];
+            let clickedAnomaly = null;
+            let clickedObject = null;
+
+            for (let i = room.objects.length - 1; i >= 0; i--) { // 手前にあるものから判定
+                const obj = room.objects[i];
+
+                // 遠近感を計算するためのスケールファクター (drawObjectと同じ計算)
+                const minPerspectiveScale = 0.5; 
+                const maxPerspectiveScale = 1.5; 
+
+                // オブジェクトの中心Y座標を正規化 (0.0 から 1.0 の範囲に変換)
+                const centerY = obj.y + obj.height / 2;
+                const normalizedY = Math.max(0, Math.min(1, centerY / CANVAS_HEIGHT)); 
+                const perspectiveScale = minPerspectiveScale + (maxPerspectiveScale - minPerspectiveScale) * normalizedY;
+                const finalScale = obj.currentScale * perspectiveScale; // drawObjectと同じ finalScale を計算
+
+                // 描画後の見かけのサイズと位置を計算して判定する
+                const effectiveWidth = obj.width * finalScale;
+                const effectiveHeight = obj.height * finalScale;
+
+                // オブジェクトの中心座標
+                const objCenterX = obj.x + obj.width / 2;
+                const objCenterY = obj.y + obj.height / 2;
+
+                // スケール適用後のオブジェクトの左上隅の座標を計算
+                // (objCenterX, objCenterY) を中心として effectiveWidth, effectiveHeight を持つ矩形の左上隅
+                const displayX = objCenterX - effectiveWidth / 2;
+                const displayY = objCenterY - effectiveHeight / 2;
+
+                // 回転を考慮したクリック判定は複雑になるため、ここでは簡易的に縮尺のみ考慮した矩形判定とする
+                if (mouseX >= displayX && mouseX <= displayX + effectiveWidth &&
+                    mouseY >= displayY && mouseY <= displayY + effectiveHeight) {
+                    clickedObject = obj;
+                    if (obj.isAnomaly) {
+                        clickedAnomaly = obj;
+                    }
+                    break;
+                }
+            }
+
+            if (clickedObject) {
+                const confirmAnomaly = confirm("これが異変ですか？(OK: はい / キャンセル: いいえ)");
+                if (confirmAnomaly) {
+                    if (clickedAnomaly) {
+                        resolveAnomaly(clickedAnomaly, room);
+                        drawCameraView(); // 異変解消後、再描画
+                    } else {
+                        loseLife(1, "それは異変ではない。ライフ-1。");
+                    }
+                }
+            }
+        });
+
+        // 難易度選択画面を表示する関数
+        function showDifficultySelection() {
+            difficultySelectionScreen.style.display = 'flex';
+            gameContainer.style.display = 'none';
+        }
+
+        // 難易度ボタンのイベントリスナー設定
+        document.getElementById('easy-button').addEventListener('click', () => {
+            numCameras = NUM_CAMERAS_EASY;
+            rulesCameraSwitchInfo.innerHTML = `<strong>スペースキー:</strong> 監視カメラを切り替えます (1 → 2 → ... → ${numCameras} → 1)。`;
+            startGame();
+        });
+
+        document.getElementById('normal-button').addEventListener('click', () => {
+            numCameras = NUM_CAMERAS_NORMAL;
+            rulesCameraSwitchInfo.innerHTML = `<strong>スペースキー:</strong> 監視カメラを切り替えます (1 → 2 → ... → ${numCameras} → 1)。`;
+            startGame();
+        });
+
+        document.getElementById('hard-button').addEventListener('click', () => {
+            numCameras = NUM_CAMERAS_HARD;
+            rulesCameraSwitchInfo.innerHTML = `<strong>スペースキー:</strong> 監視カメラを切り替えます (1 → 2 → ... → ${numCameras} → 1)。`;
+            startGame();
+        });
+
+        // ゲーム開始は難易度選択から
+        showDifficultySelection();
+
+    </script>
+</body>
+</html>
