@@ -117,7 +117,7 @@
             <li><strong>マウスでクリック:</strong> 異変を見つけたらクリックしてください。</li>
             <li><strong>確認ダイアログ:</strong> クリック後、「これが異変ですか？Y/N」と表示されます。Yを選ぶと判定、Nを選ぶと何もしません。</li>
             <li><strong>誤認:</strong> 異変ではない場所をクリックするとライフが 1 減ります。</li>
-            <li><strong>見逃し:</strong> 異変のあるカメラを切り替えてしまうと、ライフが 5 減ります。</li>
+            <li><strong>見逃し:</strong> 異変のあるカメラを切り替えてしまうと、ライフが 5 減ります。<strong>さらに、見逃された異変は次のターンでさらに変化し、ライフが追加で減少します。</strong></li>
             <li><strong>異変の累積:</strong> 異変は発見されない限り残り続け、同じカメラに複数の異変が発生することもあります。</li>
             <li><strong>ゲームオーバー:</strong> ライフが 0 になるとゲームオーバーです。</li>
             <li><strong>ゲームクリア:</strong> 10 ターン目を終えるとゲームクリアです。</li>
@@ -130,7 +130,12 @@
         const INITIAL_LIFE = 20; // 初期ライフ
         const MAX_TURNS = 10;    // 最大ターン数
 
-        const ANOMALY_CHANCE_PER_ROOM = 0.3; // 異変発生確率 (部屋表示2回目以降)
+        const ANOMALY_CHANCE_PER_ROOM = 0.3; // 異変発生確率 (部屋表示2回目以降) の基本値
+        const ANOMALY_CHANCE_INCREASE_PER_TURN = 0.05; // ターンごとの異変発生確率増加量
+        const MAX_ANOMALY_CHANCE = 0.8; // 異変発生確率の上限
+        const MISSED_ANOMALY_BASE_PENALTY = 5; // 見逃し異変の基本ライフ減少量
+        const MISSED_ANOMALY_EVOLUTION_PENALTY_MULTIPLIER = 2; // 見逃し異変が変化した際の追加ライフ減少倍率
+
         const ABNORMAL_OBJECT_CHANCE = 0.1; // 異変の種類として異常オブジェクトが追加される確率
 
         // 難易度ごとのカメラ数
@@ -158,15 +163,155 @@
 
         // オブジェクトの基本定義
         const OBJECT_TYPES = [
-            { name: "テーブル", draw: (ctx, obj) => { ctx.rect(obj.x, obj.y + obj.height * 0.2, obj.width, obj.height * 0.8); ctx.rect(obj.x + obj.width * 0.1, obj.y, obj.width * 0.8, obj.height * 0.2); } },
-            { name: "椅子", draw: (ctx, obj) => { ctx.rect(obj.x, obj.y, obj.width, obj.height); ctx.rect(obj.x + obj.width * 0.1, obj.y - obj.height * 0.3, obj.width * 0.8, obj.height * 0.3); } },
-            { name: "花瓶", draw: (ctx, obj) => { ctx.beginPath(); ctx.moveTo(obj.x + obj.width / 2, obj.y); ctx.lineTo(obj.x + obj.width * 0.1, obj.y + obj.height); ctx.lineTo(obj.x + obj.width * 0.9, obj.y + obj.height); ctx.closePath(); } },
-            { name: "積み木", draw: (ctx, obj) => { ctx.rect(obj.x, obj.y, obj.width, obj.height); } },
-            { name: "ボール", draw: (ctx, obj) => { ctx.arc(obj.x + obj.width / 2, obj.y + obj.height / 2, obj.width / 2, 0, Math.PI * 2); } },
-            { name: "ベッド", draw: (ctx, obj) => { ctx.rect(obj.x, obj.y, obj.width, obj.height); ctx.rect(obj.x + obj.width * 0.05, obj.y + obj.height * 0.05, obj.width * 0.9, obj.height * 0.9); } },
-            { name: "男の人", draw: (ctx, obj) => { ctx.beginPath(); ctx.arc(obj.x + obj.width / 2, obj.y + obj.height * 0.2, obj.width * 0.3, 0, Math.PI * 2); ctx.rect(obj.x + obj.width * 0.3, obj.y + obj.height * 0.35, obj.width * 0.4, obj.height * 0.65); } },
-            { name: "女の人", draw: (ctx, obj) => { ctx.beginPath(); ctx.arc(obj.x + obj.width / 2, obj.y + obj.height * 0.2, obj.width * 0.3, 0, Math.PI * 2); ctx.moveTo(obj.x + obj.width * 0.3, obj.y + obj.height * 0.35); ctx.lineTo(obj.x + obj.width * 0.1, obj.y + obj.height); ctx.lineTo(obj.x + obj.width * 0.9, obj.y + obj.height); ctx.lineTo(obj.x + obj.width * 0.7, obj.y + obj.height * 0.35); ctx.closePath(); } },
-            { name: "子ども", draw: (ctx, obj) => { ctx.beginPath(); ctx.arc(obj.x + obj.width / 2, obj.y + obj.height * 0.2, obj.width * 0.25, 0, Math.PI * 2); ctx.rect(obj.x + obj.width * 0.35, obj.y + obj.height * 0.35, obj.width * 0.3, obj.height * 0.65); } },
+            { name: "テーブル", draw: (ctx, bounds) => { ctx.rect(bounds.x, bounds.y + bounds.height * 0.2, bounds.width, bounds.height * 0.8); ctx.rect(bounds.x + bounds.width * 0.1, bounds.y, bounds.width * 0.8, bounds.height * 0.2); } },
+            { name: "椅子", draw: (ctx, bounds) => { ctx.rect(bounds.x, bounds.y, bounds.width, bounds.height); ctx.rect(bounds.x + bounds.width * 0.1, bounds.y - bounds.height * 0.3, bounds.width * 0.8, bounds.height * 0.3); } },
+            { name: "花瓶", draw: (ctx, bounds) => { ctx.beginPath(); ctx.moveTo(bounds.x + bounds.width / 2, bounds.y); ctx.lineTo(bounds.x + bounds.width * 0.1, bounds.y + bounds.height); ctx.lineTo(bounds.x + bounds.width * 0.9, bounds.y + bounds.height); ctx.closePath(); } },
+            { name: "積み木", draw: (ctx, bounds) => { ctx.rect(bounds.x, bounds.y, bounds.width, bounds.height); } },
+            { name: "ボール", draw: (ctx, bounds) => { ctx.arc(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2, bounds.width / 2, 0, Math.PI * 2); } },
+            { name: "ベッド", draw: (ctx, bounds) => { ctx.rect(bounds.x, bounds.y, bounds.width, bounds.height); ctx.rect(bounds.x + bounds.width * 0.05, bounds.y + bounds.height * 0.05, bounds.width * 0.9, bounds.height * 0.9); } },
+            { 
+                name: "男の人", 
+                draw: (ctx, bounds, objData) => { // boundsは相対座標(x:-width/2, y:-height/2)を持っています
+                    const headCenterY = bounds.y + bounds.height * 0.2;
+                    const headRadius = bounds.width * 0.3;
+                    const bodyX = bounds.x + bounds.width * 0.3;
+                    const bodyY = bounds.y + bounds.height * 0.35;
+                    const bodyWidth = bounds.width * 0.4;
+                    const bodyHeight = bounds.height * 0.65;
+
+                    ctx.beginPath();
+                    // 頭部（相対座標の原点x=0、headCenterYに中心を持つ）
+                    ctx.arc(0, headCenterY, headRadius, 0, Math.PI * 2); 
+                    // 胴体（boundsの左上隅を基準に描画）
+                    ctx.rect(bodyX, bodyY, bodyWidth, bodyHeight);
+                    
+                    // 胴体と頭部を塗りつぶし、線を描画
+                    ctx.fill();
+                    ctx.stroke();
+
+                    // 前を向いている場合のみ顔を描画
+                    if (objData.direction === 'front') {
+                        ctx.fillStyle = '#eee'; // 目の色
+                        ctx.strokeStyle = '#eee'; // 口の線の色
+                        ctx.lineWidth = 1; // 口の線の太さ
+                        
+                        const eyeRadius = headRadius * 0.1;
+                        const eyeXOffset = headRadius * 0.3; 
+                        const eyeY = headCenterY - headRadius * 0.1; 
+
+                        // 左目
+                        ctx.beginPath();
+                        ctx.arc(-eyeXOffset, eyeY, eyeRadius, 0, Math.PI * 2); 
+                        ctx.fill();
+                        // 右目
+                        ctx.beginPath();
+                        ctx.arc(eyeXOffset, eyeY, eyeRadius, 0, Math.PI * 2); 
+                        ctx.fill();
+
+                        // 笑顔の口
+                        ctx.beginPath();
+                        const mouthY = headCenterY + headRadius * 0.2;
+                        const mouthRadius = headRadius * 0.3;
+                        // 上向きに湾曲した弧を描画して笑顔にする
+                        ctx.arc(0, mouthY, mouthRadius, 0.2 * Math.PI, 0.8 * Math.PI); // 36度から144度までの弧
+                        ctx.stroke();
+                    }
+                }
+            },
+            { 
+                name: "女の人", 
+                draw: (ctx, bounds, objData) => {
+                    const headCenterY = bounds.y + bounds.height * 0.2;
+                    const headRadius = bounds.width * 0.3;
+                    const bodyTopX = bounds.x + bounds.width * 0.3;
+                    const bodyTopY = bounds.y + bounds.height * 0.35;
+                    const bodyBottomLeftX = bounds.x + bounds.width * 0.1;
+                    const bodyBottomRightX = bounds.x + bounds.width * 0.9;
+                    const bodyBottomY = bounds.y + bounds.height;
+                    const bodyTopRightX = bounds.x + bounds.width * 0.7;
+
+                    ctx.beginPath();
+                    // 頭部
+                    ctx.arc(0, headCenterY, headRadius, 0, Math.PI * 2); 
+                    // 胴体（ドレス状）
+                    ctx.moveTo(bodyTopX, bodyTopY); 
+                    ctx.lineTo(bodyBottomLeftX, bodyBottomY);
+                    ctx.lineTo(bodyBottomRightX, bodyBottomY);
+                    ctx.lineTo(bodyTopRightX, bodyTopY);
+                    ctx.closePath();
+                    
+                    ctx.fill();
+                    ctx.stroke();
+
+                    // 前を向いている場合のみ顔を描画
+                    if (objData.direction === 'front') {
+                        ctx.fillStyle = '#eee';
+                        ctx.strokeStyle = '#eee';
+                        ctx.lineWidth = 1;
+                        
+                        const eyeRadius = headRadius * 0.1;
+                        const eyeXOffset = headRadius * 0.3;
+                        const eyeY = headCenterY - headRadius * 0.1;
+
+                        ctx.beginPath();
+                        ctx.arc(-eyeXOffset, eyeY, eyeRadius, 0, Math.PI * 2);
+                        ctx.fill();
+                        ctx.beginPath();
+                        ctx.arc(eyeXOffset, eyeY, eyeRadius, 0, Math.PI * 2);
+                        ctx.fill();
+
+                        ctx.beginPath();
+                        const mouthY = headCenterY + headRadius * 0.2;
+                        const mouthRadius = headRadius * 0.3;
+                        ctx.arc(0, mouthY, mouthRadius, 0.2 * Math.PI, 0.8 * Math.PI);
+                        ctx.stroke();
+                    }
+                }
+            },
+            { 
+                name: "子ども", 
+                draw: (ctx, bounds, objData) => {
+                    const headCenterY = bounds.y + bounds.height * 0.2;
+                    const headRadius = bounds.width * 0.25;
+                    const bodyX = bounds.x + bounds.width * 0.35;
+                    const bodyY = bounds.y + bounds.height * 0.35;
+                    const bodyWidth = bounds.width * 0.3;
+                    const bodyHeight = bounds.height * 0.65;
+
+                    ctx.beginPath();
+                    // 頭部
+                    ctx.arc(0, headCenterY, headRadius, 0, Math.PI * 2); 
+                    // 胴体
+                    ctx.rect(bodyX, bodyY, bodyWidth, bodyHeight);
+                    
+                    ctx.fill();
+                    ctx.stroke();
+
+                    // 前を向いている場合のみ顔を描画
+                    if (objData.direction === 'front') {
+                        ctx.fillStyle = '#eee';
+                        ctx.strokeStyle = '#eee';
+                        ctx.lineWidth = 1;
+                        
+                        const eyeRadius = headRadius * 0.1;
+                        const eyeXOffset = headRadius * 0.3;
+                        const eyeY = headCenterY - headRadius * 0.1;
+
+                        ctx.beginPath();
+                        ctx.arc(-eyeXOffset, eyeY, eyeRadius, 0, Math.PI * 2);
+                        ctx.fill();
+                        ctx.beginPath();
+                        ctx.arc(eyeXOffset, eyeY, eyeRadius, 0, Math.PI * 2);
+                        ctx.fill();
+
+                        ctx.beginPath();
+                        const mouthY = headCenterY + headRadius * 0.2;
+                        const mouthRadius = headRadius * 0.3;
+                        ctx.arc(0, mouthY, mouthRadius, 0.2 * Math.PI, 0.8 * Math.PI);
+                        ctx.stroke();
+                    }
+                }
+            },
         ];
 
         const ABNORMAL_OBJECT_TYPES = [
@@ -179,7 +324,7 @@
             { name: "赤い子ども", baseType: "子ども", color: "red" },
             { name: "黒い子ども", baseType: "子ども", color: "black" },
             { name: "白い子ども", baseType: "子ども", color: "white" },
-            { name: "血だまり", draw: (ctx, obj) => { ctx.beginPath(); ctx.ellipse(obj.x + obj.width / 2, obj.y + obj.height / 2, obj.width / 2, obj.height / 3, 0, 0, Math.PI * 2); }, color: "darkred" },
+            { name: "血だまり", draw: (ctx, bounds) => { ctx.beginPath(); ctx.ellipse(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2, bounds.width / 2, bounds.height / 3, 0, 0, Math.PI * 2); }, color: "darkred" },
         ];
 
         let objectIdCounter = 0; // オブジェクトにユニークなIDを割り当てる
@@ -244,7 +389,15 @@
                 isAnomaly: isAnomaly,
                 anomalyType: anomalyType,
                 originalState: null, // 異変前の状態を保存用
+                missedCount: 0, // 見逃された回数
+                anomaliesApplied: [], // 適用された異変の種類を記録
+                direction: null // 追加: 人物オブジェクトの向き
             };
+
+            // 人物オブジェクトにのみ方向を設定
+            if (['男の人', '女の人', '子ども'].includes(typeDef.name)) {
+                newObj.direction = Math.random() < 0.5 ? 'front' : 'back';
+            }
 
             // 異常オブジェクトの場合、色を上書き
             if (anomalyType === 'add_abnormal_object') {
@@ -290,7 +443,8 @@
             ctx.lineWidth = 2;
 
             ctx.beginPath();
-            obj.draw(ctx, { x: -obj.width / 2, y: -obj.height / 2, width: obj.width, height: obj.height });
+            // draw関数にboundsと元のオブジェクトデータ（obj）を渡す
+            obj.draw(ctx, { x: -obj.width / 2, y: -obj.height / 2, width: obj.width, height: obj.height }, obj);
             ctx.fill();
             ctx.stroke();
 
@@ -345,15 +499,20 @@
                 return;
             }
 
+            // ターンが進むほど異変発生確率を高くする
+            let effectiveAnomalyChance = ANOMALY_CHANCE_PER_ROOM + (currentTurn - 1) * ANOMALY_CHANCE_INCREASE_PER_TURN;
+            // 確率の上限を設定
+            effectiveAnomalyChance = Math.min(effectiveAnomalyChance, MAX_ANOMALY_CHANCE);
+
             // 異変が発生する確率判定
-            if (Math.random() < ANOMALY_CHANCE_PER_ROOM) {
+            if (Math.random() < effectiveAnomalyChance) {
                 createAnomaly(room);
             }
             room.lastViewedTurn = currentTurn; // 最後にこの部屋を見たターンを更新
         }
 
         // 異変を作成する
-        function createAnomaly(room) {
+        function createAnomaly(room, targetObj = null, isEvolution = false) {
             const anomalyTypes = [
                 'transparent', 'add_normal_object', 'move', 'color', 'rotate', 'scale'
             ];
@@ -363,28 +522,43 @@
             }
 
             const selectedAnomalyType = anomalyTypes[Math.floor(Math.random() * anomalyTypes.length)];
-            let targetObj = null;
-
-            // 既存オブジェクトを対象とする異変の場合
-            if (['transparent', 'move', 'color', 'rotate', 'scale'].includes(selectedAnomalyType)) {
-                // 既存オブジェクトからランダムに1つ選択し、まだ異変でないものを選ぶ
-                const normalObjects = room.objects.filter(obj => !obj.isAnomaly);
-                if (normalObjects.length === 0) {
-                    // 対象オブジェクトがない場合は異変を作成できないので処理を中断するか、別の異変にする
-                    return;
-                }
-                targetObj = normalObjects[Math.floor(Math.random() * normalObjects.length)];
-            }
-
-            // 異変前の状態を保存
-            const originalState = targetObj ? { ...targetObj } : null;
-
+            
+            let objToModify = targetObj; // 異変進化の場合は指定されたオブジェクト
             let newAnomalyObject = null; // 新しく追加される異変オブジェクト用
 
+            // 新規異変の場合、対象オブジェクトをランダムに選択
+            if (!objToModify) {
+                if (['transparent', 'move', 'color', 'rotate', 'scale'].includes(selectedAnomalyType)) {
+                    const normalObjects = room.objects.filter(obj => !obj.isAnomaly);
+                    if (normalObjects.length === 0) {
+                        // 対象オブジェクトがない場合は異変を作成できないので処理を中断するか、別の異変にする
+                        return;
+                    }
+                    objToModify = normalObjects[Math.floor(Math.random() * normalObjects.length)];
+                }
+            } else if (isEvolution) { // 異変進化の場合、既に異変を持つオブジェクトを対象
+                // 既にこのタイプの異変が適用されているかチェックし、適用済みなら別の異変タイプを試す
+                if (objToModify.anomaliesApplied && objToModify.anomaliesApplied.includes(selectedAnomalyType)) {
+                    // 同じ異変タイプが連続しないように再帰的に試行 (無限ループにならないよう上限設けても良いが今回は簡略化)
+                    return createAnomaly(room, targetObj, isEvolution); // 別の異変タイプを適用し直す
+                }
+            }
+            
+            // 新規異変で、かつ既に同じ異変が適用されている場合は何もしない（見逃しによる進化の場合は重ねて適用可能）
+            if (objToModify && objToModify.anomaliesApplied && objToModify.anomaliesApplied.includes(selectedAnomalyType) && !isEvolution) {
+                 return; // 新規異変で既に同じ異変が適用されている場合は何もしない
+            }
+
+            // 異変前の状態を保存 (元々あったオブジェクトで、まだoriginalStateがない場合のみ保存)
+            if (objToModify && !objToModify.originalState && !isEvolution) {
+                objToModify.originalState = { ...objToModify };
+            }
+
+            // 異変の適用
             switch (selectedAnomalyType) {
                 case 'transparent':
-                    if (targetObj) {
-                        targetObj.currentAlpha = Math.random() * 0.4 + 0.1; // 10% - 50% の透明度
+                    if (objToModify) {
+                        objToModify.currentAlpha = Math.random() * 0.4 + 0.1; // 10% - 50% の透明度
                     }
                     break;
                 case 'add_normal_object':
@@ -405,37 +579,45 @@
                     }
                     break;
                 case 'move':
-                    if (targetObj) {
-                        targetObj.vx = (Math.random() < 0.5 ? 1 : -1) * (Math.random() * 0.5 + 0.1); // 0.1-0.6 px/frame
-                        targetObj.vy = (Math.random() < 0.5 ? 1 : -1) * (Math.random() * 0.5 + 0.1);
+                    if (objToModify) {
+                        objToModify.vx = (Math.random() < 0.5 ? 1 : -1) * (Math.random() * 0.5 + 0.1); // 0.1-0.6 px/frame
+                        objToModify.vy = (Math.random() < 0.5 ? 1 : -1) * (Math.random() * 0.5 + 0.1);
                     }
                     break;
                 case 'color':
-                    if (targetObj) {
-                        targetObj.currentColor = `hsl(${Math.random() * 360}, 100%, 70%)`; // 派手な色に変更
+                    if (objToModify) {
+                        objToModify.currentColor = `hsl(${Math.random() * 360}, 100%, 70%)`; // 派手な色に変更
                     }
                     break;
                 case 'rotate':
-                    if (targetObj) {
-                        targetObj.currentRotation = (Math.random() * Math.PI / 2) + Math.PI / 9; // 20度(PI/9)以上回転
+                    if (objToModify) {
+                        objToModify.currentRotation = (Math.random() * Math.PI / 2) + Math.PI / 9; // 20度(PI/9)以上回転
                     }
                     break;
                 case 'scale':
-                    if (targetObj) {
-                        targetObj.currentScale = Math.random() < 0.5 ? (Math.random() * 0.3 + 0.7) : (Math.random() * 0.7 + 1.3); // 0.7-1.0 or 1.3-2.0
+                    if (objToModify) {
+                        objToModify.currentScale = Math.random() < 0.5 ? (Math.random() * 0.3 + 0.7) : (Math.random() * 0.7 + 1.3); // 0.7-1.0 or 1.3-2.0
                     }
                     break;
             }
 
-            // 異変フラグを設定
-            const affectedObj = newAnomalyObject || targetObj;
+            // 異変フラグを設定し、適用された異変を記録
+            const affectedObj = newAnomalyObject || objToModify;
             if (affectedObj) {
                 affectedObj.isAnomaly = true;
-                affectedObj.anomalyType = selectedAnomalyType;
-                if (originalState) { // 元々あったオブジェクトの場合のみoriginalStateを保存
-                    affectedObj.originalState = originalState;
-                }
+                affectedObj.anomalyType = selectedAnomalyType; // 最後の異変タイプを保持
+                if (!affectedObj.anomaliesApplied) affectedObj.anomaliesApplied = [];
+                affectedObj.anomaliesApplied.push(selectedAnomalyType); // 適用された異変の履歴
             }
+        }
+
+        // 異変をさらに変化させる関数
+        function evolveAnomaly(obj, room) {
+            // 見逃された回数に応じて、さらなる変化を適用
+            // ここではシンプルに、同じオブジェクトに別の異変を適用し直す
+            createAnomaly(room, obj, true); // true を渡して進化として扱う
+            const evolutionPenalty = obj.missedCount * MISSED_ANOMALY_EVOLUTION_PENALTY_MULTIPLIER;
+            loseLife(evolutionPenalty, `見逃された異変がさらに変化した！ライフ-${evolutionPenalty}。`);
         }
 
         // 異変を解消する
@@ -443,6 +625,8 @@
             if (obj.isAnomaly) {
                 messageAreaDiv.textContent = "異変を発見しました！";
                 obj.isAnomaly = false;
+                obj.missedCount = 0; // 解消されたので見逃しカウントをリセット
+                obj.anomaliesApplied = []; // 適用された異変の履歴もクリア
 
                 // 異変の種類に応じて状態を元に戻す
                 if (obj.anomalyType === 'add_normal_object' || obj.anomalyType === 'add_abnormal_object') {
@@ -450,22 +634,39 @@
                     room.objects = room.objects.filter(o => o.id !== obj.id);
                 } else if (obj.originalState) {
                     // 既存オブジェクトの異変は元の状態に戻す
-                    Object.assign(obj, obj.originalState);
+                    // originalStateから個々のプロパティを復元
+                    obj.x = obj.originalState.x;
+                    obj.y = obj.originalState.y;
+                    obj.width = obj.originalState.width;
+                    obj.height = obj.originalState.height;
+                    obj.type = obj.originalState.type;
+                    obj.draw = obj.originalState.draw;
+                    obj.baseColor = obj.originalState.baseColor;
+                    obj.currentColor = obj.originalState.baseColor; // 元の色に戻す
+                    obj.baseRotation = obj.originalState.baseRotation;
+                    obj.currentRotation = obj.originalState.baseRotation; // 元の回転に戻す
+                    obj.baseScale = obj.originalState.baseScale;
+                    obj.currentScale = obj.originalState.baseScale; // 元のスケールに戻す
+                    obj.baseAlpha = obj.originalState.baseAlpha;
+                    obj.currentAlpha = obj.originalState.baseAlpha; // 元の透明度に戻す
+                    obj.vx = obj.originalState.vx; // 元の移動速度に戻す
+                    obj.vy = obj.originalState.vy; // 元の移動速度に戻す
+                    obj.direction = obj.originalState.direction; // 方向を元に戻す
+
                     obj.originalState = null; // もう不要
-                } else {
-                    // originalStateがない場合 (例: initial objects with anomaly, should not happen based on current logic)
+                    obj.anomalyType = null;
+                } else { // originalStateがない場合 (例えば、初期配置からすでに異変の場合など、現在のロジックでは発生しないはず)
                     obj.currentAlpha = obj.baseAlpha;
                     obj.currentColor = obj.baseColor;
                     obj.currentRotation = obj.baseRotation;
                     obj.currentScale = obj.baseScale;
                     obj.vx = 0;
                     obj.vy = 0;
-                }
-                
-                // その部屋にまだ未発見の異変が残っているかチェック
-                const remainingAnomalies = room.objects.some(o => o.isAnomaly);
-                if (!remainingAnomalies) {
-                    // その部屋の異変が全て解決された
+                    obj.anomalyType = null;
+                    // 方向も初期状態に戻す (ここではランダムに再設定)
+                    if (['男の人', '女の人', '子ども'].includes(obj.type)) {
+                        obj.direction = Math.random() < 0.5 ? 'front' : 'back';
+                    }
                 }
             }
         }
@@ -548,13 +749,23 @@
                 const prevCameraRoom = rooms[currentCameraIndex];
                 const unseenAnomalies = prevCameraRoom.objects.filter(obj => obj.isAnomaly);
                 if (unseenAnomalies.length > 0) {
-                    loseLife(5, "異変を見逃した。ライフ-5。");
-                    // ライフを減らした後も、異変は解除されないので次回の確認まで残る
+                    // 見逃された異変のmissedCountを増加
+                    unseenAnomalies.forEach(obj => {
+                        obj.missedCount++;
+                    });
+                    // 見逃しによるライフ減少
+                    loseLife(MISSED_ANOMALY_BASE_PENALTY, `異変を見逃した！ライフ-${MISSED_ANOMALY_BASE_PENALTY}。`);
                 }
 
                 currentCameraIndex = (currentCameraIndex + 1) % numCameras; // numCameras に変更
                 if (currentCameraIndex === 0) { // カメラ1に戻ったらターン数増加
                     currentTurn++;
+                    // 新しいターンが始まったら、全ての部屋の異変をチェックし、見逃された異変を変化させる
+                    rooms.forEach(room => {
+                        room.objects.filter(obj => obj.isAnomaly && obj.missedCount > 0).forEach(obj => {
+                            evolveAnomaly(obj, room); // 見逃された異変をさらに変化させる
+                        });
+                    });
                     checkGameStatus(); // ターン終了時のゲームクリア判定
                 }
 
@@ -603,7 +814,7 @@
 
                 // 回転を考慮したクリック判定は複雑になるため、ここでは簡易的に縮尺のみ考慮した矩形判定とする
                 if (mouseX >= displayX && mouseX <= displayX + effectiveWidth &&
-                    mouseY >= displayY && mouseY <= displayY + effectiveHeight) {
+                    mouseY >= displayY && mouseY <= displayY + displayY + effectiveHeight) {
                     clickedObject = obj;
                     if (obj.isAnomaly) {
                         clickedAnomaly = obj;
