@@ -15,6 +15,54 @@
             margin: 0;
             padding: 20px;
         }
+        #prologue-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.95);
+            z-index: 2000;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: #0f0; /* プロローグテキストの色を緑に */
+            font-size: 1.5em;
+            line-height: 1.6;
+            text-align: center;
+            opacity: 1; /* 初期表示 */
+            transition: opacity 1s ease-out; /* フェードアウト用 */
+        }
+        #prologue-text-container {
+            max-width: 800px;
+            padding: 20px;
+        }
+        .prologue-line {
+            opacity: 0;
+            transform: translateY(20px);
+            transition: opacity 1s ease-out, transform 1s ease-out;
+            margin-bottom: 0.5em; /* 各行間の余白 */
+        }
+        .prologue-rules {
+            list-style: none; /* リストの点を非表示 */
+            padding-left: 0; /* 左の余白をなくす */
+            margin-top: 1.5em; /* ルール前の余白 */
+            border-top: 1px dashed #444; /* 区切り線 */
+            padding-top: 1em; /* 区切り線上の余白 */
+        }
+        .prologue-rules li {
+            margin-bottom: 0.5em;
+        }
+        #start-prompt {
+            margin-top: 40px;
+            font-size: 1.8em;
+            color: #ff0; /* 黄色で目立たせる */
+            opacity: 0;
+            transition: opacity 1s ease-in-out;
+            cursor: pointer;
+            text-shadow: 0 0 10px #ff0, 0 0 20px rgba(255, 255, 0, 0.5);
+        }
         #game-container {
             border: 2px solid #555;
             background-color: #333;
@@ -32,12 +80,11 @@
             color: #0f0;
         }
         #game-stats {
-            /* ライフとターン数をカメラ画像より下、操作説明より上に大きなフォントで表示 */
-            margin-top: 15px; /* canvasとの間に余白 */
-            margin-bottom: 20px; /* rules-containerとの間に余白 */
-            font-size: 2.2em; /* 大きなフォントに調整 */
+            margin-top: 15px;
+            margin-bottom: 20px;
+            font-size: 2.2em;
             color: #0f0;
-            text-shadow: 0 0 8px #0f0, 0 0 15px rgba(0, 255, 0, 0.5); /* 視認性向上の影 */
+            text-shadow: 0 0 8px #0f0, 0 0 15px rgba(0, 255, 0, 0.5);
         }
         canvas {
             background-color: #000;
@@ -46,22 +93,21 @@
             margin: 0 auto 15px auto;
         }
         #message-area {
-            /* メッセージをカメラ映像の前に大きく映し出されるように表示 */
             position: absolute;
-            top: 50%; /* 垂直方向の中央 */
-            left: 50%; /* 水平方向の中央 */
-            transform: translate(-50%, -50%); /* 自身のサイズを考慮して完全に中央へ */
-            font-size: 3.5em; /* 大フォントに調整 */
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 3.5em;
             color: #ff0;
-            min-height: auto; /* 高さを自動調整 */
-            width: 100%; /* 全幅を使う */
-            text-align: center; /* 中央揃え */
-            z-index: 10; /* キャンバスより手前に */
-            text-shadow: 0 0 10px black, 0 0 20px rgba(255, 255, 0, 0.5); /* 視認性向上の影 */
-            pointer-events: none; /* クリックイベントがメッセージを透過するように */
-            opacity: 0; /* 初期は非表示 */
-            transition: opacity 0.5s ease-out; /* フェードイン/アウト */
-            white-space: nowrap; /* テキストの折り返しを防ぐ */
+            min-height: auto;
+            width: 100%;
+            text-align: center;
+            z-index: 10;
+            text-shadow: 0 0 10px black, 0 0 20px rgba(255, 255, 0, 0.5);
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.5s ease-out;
+            white-space: nowrap;
         }
         #rules-container {
             background-color: #1a1a1a;
@@ -73,6 +119,7 @@
             max-width: 90%;
             font-size: 0.9em;
             line-height: 1.6;
+            display: none; /* 初期は非表示に */
         }
         #rules-container h3 {
             color: #0f0;
@@ -97,6 +144,9 @@
             font-size: 2em;
             text-align: center;
         }
+        #difficulty-selection-screen {
+            display: none; /* プロローグ表示中は非表示 */
+        }
         .game-over-screen h2 { color: #f00; }
         .game-clear-screen h2 { color: #0f0; }
         #difficulty-selection-screen h2 { color: #0ff; margin-bottom: 40px; }
@@ -117,6 +167,39 @@
     </style>
 </head>
 <body>
+    <div id="prologue-screen">
+        <div id="prologue-text-container">
+            <p class="prologue-line">？？？：「やあ、よく来たね。</p>
+            <p class="prologue-line">今日から仕事、よろしく頼むよ。</p>
+            <p class="prologue-line"></p>
+            <p class="prologue-line">仕事内容は簡単だ。</p>
+            <p class="prologue-line">夜中、監視カメラを眺めるだけさ。</p>
+            <p class="prologue-line">それだけで時給2万円だ。</p>
+            <p class="prologue-line"></p>
+            <p class="prologue-line">ただ、注意してほしいことがいくつかある。</p>
+            <p class="prologue-line"></p>
+            <p class="prologue-line">監視カメラに映っているものは基本動かない。</p>
+            <p class="prologue-line">何も変化しない。</p>
+            <p class="prologue-line">ただ、もし…万が一なにか変化があったら即座に報告してくれ。</p>
+            <p class="prologue-line">なにより君の身の安全が心配だ。ハハハ。</p>
+            <p class="prologue-line"></p>
+            <p class="prologue-line">監視カメラの場所がどこで、映っているのは誰か？</p>
+            <p class="prologue-line">そんなことは気にするな。</p>
+            <p class="prologue-line"></p>
+            <p class="prologue-line">じゃあな、また明日の朝。</p>
+            <p class="prologue-line">…会えたらいいな。クスクス。</p>
+            <p class="prologue-line"></p>
+            <p class="prologue-line">---[ルール]---</p>
+            <ul class="prologue-rules">
+                <li class="prologue-line">壱：複数の監視カメラを切り替えながら確認してください</li>
+                <li class="prologue-line">弐：監視カメラはスペースキーで切り替えられます</li>
+                <li class="prologue-line">参：前回表示時と異なる個所がある場合はそこをクリックしてください</li>
+                <li class="prologue-line">死：ライフがゼロになるとゲームオーバー、10ターン終えればゲームクリアです</li>
+            </ul>
+        </div>
+        <div id="start-prompt">画面をクリックして開始</div>
+    </div>
+
     <div id="difficulty-selection-screen">
         <h2>難易度選択</h2>
         <button id="easy-button" data-difficulty="easy">EASY (カメラ2個)</button>
@@ -128,7 +211,6 @@
         <div id="camera-info">監視カメラ 1</div>
         <div id="message-area"></div>
         <canvas id="gameCanvas" width="800" height="600"></canvas>
-        <!-- ライフとターン数はカメラ画像より下、操作説明より上に表示されるようHTML構造とCSSを修正 -->
         <div id="game-stats">ライフ: 20 | ターン: 1</div>
     </div>
 
@@ -140,7 +222,7 @@
             <li><strong>確認ダイアログ:</strong> クリック後、「これが異変ですか？Y/N」と表示されます。Yを選ぶと判定、Nを選ぶと何もしません。</li>
             <li><strong>誤認:</strong> 異変ではない場所をクリックするとライフが 1 減ります。</li>
             <li><strong>見逃し:</strong> 異変のあるカメラを切り替えてしまうと、ライフが 5 減ります。<strong>さらに、見逃された異変は次のターンでさらに変化し、ライフが追加で減少します。</strong></li>
-            <li><strong>異変の累積:</strong> 異変は発見されない限り残り続け、同じカメラに複数の異変が発生することもあります。</li>
+            <li><strong>異変の累積:</b> 異変は発見されない限り残り続け、同じカメラに複数の異変が発生することもあります。</li>
             <li><strong>ゲームオーバー:</strong> ライフが 0 になるとゲームオーバーです。</li>
             <li><strong>ゲームクリア:</strong> 10 ターン目を終えるとゲームクリアです。</li>
         </ul>
@@ -174,6 +256,10 @@
         const gameContainer = document.getElementById('game-container');
         const difficultySelectionScreen = document.getElementById('difficulty-selection-screen');
         const rulesCameraSwitchInfo = document.getElementById('rules-camera-switch-info');
+        const prologueScreen = document.getElementById('prologue-screen');
+        const prologueLines = document.querySelectorAll('.prologue-line');
+        const startPrompt = document.getElementById('start-prompt');
+        const rulesContainer = document.getElementById('rules-container'); // rules-containerの取得を追加
 
         let currentLife = INITIAL_LIFE;
         let currentTurn = 1;
@@ -183,6 +269,7 @@
         let gameClear = false;
         let animationFrameId; // アニメーションフレームIDを保持
         let numCameras; // 現在の難易度でのカメラ数
+        let isPrologueActive = true; // プロローグ表示中フラグ
 
         // HSLカラー文字列をパースして数値に変換
         function parseHslString(hslString) {
@@ -530,6 +617,52 @@
 
         let objectIdCounter = 0; // オブジェクトにユニークなIDを割り当てる
 
+        // プロローグ表示
+        function showPrologue() {
+            prologueScreen.style.display = 'flex'; // プロローグ画面を表示
+            isPrologueActive = true;
+            rulesContainer.style.display = 'none'; // プロローグ中はルールも非表示
+            difficultySelectionScreen.style.display = 'none'; // 難易度選択画面も非表示に
+
+            let delay = 0;
+            const lineDisplayInterval = 800; // 各行が表示される間隔 (ミリ秒)
+
+            prologueLines.forEach((line, index) => {
+                setTimeout(() => {
+                    line.style.opacity = 1;
+                    line.style.transform = 'translateY(0)';
+                }, delay);
+                delay += lineDisplayInterval;
+
+                // 最後の行が表示された後に「クリックで開始」を表示
+                if (index === prologueLines.length - 1) {
+                    setTimeout(() => {
+                        startPrompt.style.opacity = 1;
+                        prologueScreen.addEventListener('click', hidePrologueAndStartGame, { once: true });
+                        document.addEventListener('keydown', handlePrologueKeyDown, { once: true }); // キー入力でも開始できるように
+                    }, delay + 1000); // 最後の行から1秒後に表示
+                }
+            });
+        }
+
+        function handlePrologueKeyDown(e) {
+            if (e.code === 'Space' || e.code === 'Enter') {
+                e.preventDefault();
+                hidePrologueAndStartGame();
+            }
+        }
+
+        function hidePrologueAndStartGame() {
+            prologueScreen.style.opacity = 0; // フェードアウト開始
+            isPrologueActive = false;
+            document.removeEventListener('keydown', handlePrologueKeyDown);
+
+            setTimeout(() => {
+                prologueScreen.style.display = 'none'; // フェードアウト後に非表示
+                showDifficultySelection(); // 難易度選択画面を表示
+            }, 1000); // CSSのtransition時間と合わせる
+        }
+
         // ゲームの開始 (難易度選択後に呼ばれる)
         function startGame() {
             currentLife = INITIAL_LIFE;
@@ -558,6 +691,7 @@
             messageAreaDiv.textContent = ""; // ゲーム開始時にメッセージエリアをクリア
             difficultySelectionScreen.style.display = 'none';
             gameContainer.style.display = 'flex'; // ゲーム画面を表示
+            rulesContainer.style.display = 'block'; // ルールコンテナを表示
 
             updateGame(); // 最初の描画
             animateMovingObjects(); // 動くオブジェクトのアニメーションを開始
@@ -621,8 +755,8 @@
 
             // 遠近感を計算するためのスケールファクター
             // Yが0（上端）に近いほど小さく、YがCANVAS_HEIGHT（下端）に近いほど大きくする
-            const minPerspectiveScale = 0.5; // Y=0 の時の最小スケール
-            const maxPerspectiveScale = 1.5; // Y=CANVAS_HEIGHT の時の最大スケール
+            const minPerspectiveScale = 0.5; 
+            const maxPerspectiveScale = 1.5; 
 
             // オブジェクトの中心Y座標を正規化 (0.0 から 1.0 の範囲に変換)
             const centerY = obj.y + obj.height / 2;
@@ -965,7 +1099,7 @@
 
         // 移動するオブジェクトのアニメーションループ
         function animateMovingObjects() {
-            if (gameOver || gameClear) return;
+            if (gameOver || gameClear || isPrologueActive) return; // プロローグ中はアニメーション停止
 
             const room = rooms[currentCameraIndex];
             room.objects.forEach(obj => {
@@ -991,7 +1125,7 @@
 
         // イベントリスナー
         document.addEventListener('keydown', (e) => {
-            if (gameOver || gameClear || difficultySelectionScreen.style.display !== 'none') return; // ゲーム中または難易度選択画面表示中のみ反応
+            if (gameOver || gameClear || isPrologueActive || difficultySelectionScreen.style.display !== 'none') return; // プロローグ中も反応しない
 
             if (e.code === 'Space') {
                 e.preventDefault(); // スクロール防止
@@ -1028,7 +1162,7 @@
         });
 
         canvas.addEventListener('click', (e) => {
-            if (gameOver || gameClear || difficultySelectionScreen.style.display !== 'none') return; // ゲーム中または難易度選択画面表示中のみ反応
+            if (gameOver || gameClear || isPrologueActive || difficultySelectionScreen.style.display !== 'none') return; // プロローグ中も反応しない
 
             const rect = canvas.getBoundingClientRect();
             const mouseX = e.clientX - rect.left;
@@ -1092,6 +1226,7 @@
         function showDifficultySelection() {
             difficultySelectionScreen.style.display = 'flex';
             gameContainer.style.display = 'none';
+            rulesContainer.style.display = 'none'; // 難易度選択中はルールも非表示
         }
 
         // 難易度ボタンのイベントリスナー設定
@@ -1113,8 +1248,8 @@
             startGame();
         });
 
-        // ゲーム開始は難易度選択から
-        showDifficultySelection();
+        // ページロード時にプロローグを表示
+        window.addEventListener('DOMContentLoaded', showPrologue);
 
     </script>
 </body>
