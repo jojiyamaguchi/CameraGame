@@ -198,7 +198,7 @@
                 <li class="prologue-line">壱：複数の監視カメラを切り替えながら確認してください</li>
                 <li class="prologue-line">弐：監視カメラはスペースキーで切り替えられます</li>
                 <li class="prologue-line">参：前回表示時と異なる個所がある場合はそこをクリックしてください</li>
-                <li class="prologue-line">死：ライフがゼロになるとゲームオーバー、10ターン終えればゲームクリアです</li>
+                <li class="prologue-line">死：ライフがゼロになるとゲームオーバー、8ターン終えればゲームクリアです</li>
             </ul>
         </div>
         <div id="start-prompt">画面をクリックして開始</div>
@@ -215,7 +215,7 @@
         <div id="camera-info">監視カメラ 1</div>
         <div id="message-area"></div>
         <canvas id="gameCanvas" width="800" height="600"></canvas>
-        <div id="game-stats">ライフ: 20 | ターン: 1</div>
+        <div id="game-stats">ライフ: 20 | 経過時間: 0時間</div>
     </div>
 
     <div id="rules-container">
@@ -228,7 +228,7 @@
             <li><strong>見逃し:</strong> 異変のあるカメラを切り替えてしまうと、ライフが 5 減ります。<strong>さらに、見逃された異変は次のターンでさらに変化し、ライフが追加で減少します。</strong></li>
             <li><strong>異変の累積:</strong> 異変は発見されない限り残り続け、同じカメラに複数の異変が発生することもあります。</li>
             <li><strong>ゲームオーバー:</strong> ライフが 0 になるとゲームオーバーです。</li>
-            <li><strong>ゲームクリア:</strong> 10 ターン目を終えるとゲームクリアです。</li>
+            <li><strong>ゲームクリア:</strong> 8 ターン目を終えるとゲームクリアです。</li>
         </ul>
     </div>
 
@@ -236,7 +236,7 @@
         const CANVAS_WIDTH = 800;
         const CANVAS_HEIGHT = 600;
         const INITIAL_LIFE = 50; // 初期ライフ
-        const MAX_TURNS = 10;    // 最大ターン数
+        const MAX_TURNS = 8;    // 最大ターン数
 
         const ANOMALY_CHANCE_PER_ROOM = 0.3; // 異変発生確率 (部屋表示2回目以降) の基本値
         const ANOMALY_CHANCE_INCREASE_PER_TURN = 0.05; // ターンごとの異変発生確率増加量
@@ -819,7 +819,8 @@
 
             // 現在のカメラ情報を表示
             cameraInfoDiv.textContent = `監視カメラ ${currentCameraIndex + 1} / ${numCameras}`;
-            gameStatsDiv.textContent = `ライフ: ${currentLife} | ターン: ${currentTurn}`;
+            // ターン表示を「経過時間: X時間」に変更
+            gameStatsDiv.textContent = `ライフ: ${currentLife} | 経過時間: ${currentTurn - 1}時間`;
         }
 
         // ゲームの状態更新 (ライフ、ターン表示など)
@@ -1101,7 +1102,11 @@
                     } else { // lifeRemaining >= 26
                         text = "あなたは16万円を握りしめて家に帰った。こんなに楽に稼げるなら、中級に挑戦してもいいかもな！";
                     }
-                } else if (difficulty === 'normal') {
+                }
+                // 時給2万円 * 8時間 = 16万円
+                // 時給20万円 * 8時間 = 160万円
+                // 時給200万円 * 8時間 = 1600万円
+                else if (difficulty === 'normal') {
                     if (lifeRemaining <= 25) {
                         text = "あなたは160万円を握りしめて家に帰った。ドアを開けると恋人あなたを見て「あなた…誰ですか？」と言った。あなたも自分が誰だか分らなかった。";
                     } else { // lifeRemaining >= 26
@@ -1127,7 +1132,8 @@
             const screen = document.createElement('div');
             screen.className = type === 'gameOver' ? 'game-over-screen' : 'game-clear-screen';
             screen.innerHTML = `
-                <h2>${type === 'gameOver' ? 'GAME OVER' : 'MISSION CLEAR!'}</h2>
+                <h2>${type === 'gameOver' ? 'GAME OVER' : 'MISSION CLEAR!'}
+                </h2>
                 <p>${epilogueText}</p>
                 <button class="play-again-button">もう一度プレイする</button>
             `;
