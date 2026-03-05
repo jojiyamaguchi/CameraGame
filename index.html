@@ -20,12 +20,12 @@
             top: 0;
             left: 0;
             width: 100%;
-            height: 100%;
+            max-height: 100vh; /* 画面の高さを超えた場合にスクロール可能にする */
             background-color: rgba(0, 0, 0, 0.95);
             z-index: 2000;
             display: flex;
             flex-direction: column;
-            justify-content: center;
+            justify-content: flex-start; /* 画面上部から表示するように変更 */
             align-items: center;
             color: #0f0; /* プロローグテキストの色を緑に */
             font-size: 1.5em;
@@ -33,10 +33,14 @@
             text-align: center;
             opacity: 1; /* 初期表示 */
             transition: opacity 1s ease-out; /* フェードアウト用 */
+            overflow-y: auto; /* 内容が画面の高さを超えた場合にスクロールを有効にする */
+            padding: 20px 0; /* 上下方向のパディングを追加し、コンテンツが画面端に張り付かないようにする */
+            box-sizing: border-box; /* パディングを高さの計算に含める */
         }
         #prologue-text-container {
             max-width: 800px;
             padding: 20px;
+            margin: 0 auto; /* 水平方向の中央寄せ */
         }
         .prologue-line {
             opacity: 0;
@@ -174,7 +178,7 @@
             <p class="prologue-line"></p>
             <p class="prologue-line">仕事内容は簡単だ。</p>
             <p class="prologue-line">夜中、監視カメラを眺めるだけさ。</p>
-            <p class="prologue-line">それだけで時給2万円だ。</p>
+            <p class="prologue-line">それだけで約束の高給だ。</p>
             <p class="prologue-line"></p>
             <p class="prologue-line">ただ、注意してほしいことがいくつかある。</p>
             <p class="prologue-line"></p>
@@ -187,8 +191,8 @@
             <p class="prologue-line">そんなことは気にするな。</p>
             <p class="prologue-line"></p>
             <p class="prologue-line">じゃあな、また明日の朝。</p>
-            <p class="prologue-line">…会えたらいいな。クスクス。</p>
-            <p class="prologue-line"></p>
+            <p class="prologue-line">…会えたらいいな。ハハハ。</p>
+            <p class="prologue-line"></p><br>            <p class="prologue-line"></p>
             <p class="prologue-line">---[ルール]---</p>
             <ul class="prologue-rules">
                 <li class="prologue-line">壱：複数の監視カメラを切り替えながら確認してください</li>
@@ -222,7 +226,7 @@
             <li><strong>確認ダイアログ:</strong> クリック後、「これが異変ですか？Y/N」と表示されます。Yを選ぶと判定、Nを選ぶと何もしません。</li>
             <li><strong>誤認:</strong> 異変ではない場所をクリックするとライフが 1 減ります。</li>
             <li><strong>見逃し:</strong> 異変のあるカメラを切り替えてしまうと、ライフが 5 減ります。<strong>さらに、見逃された異変は次のターンでさらに変化し、ライフが追加で減少します。</strong></li>
-            <li><strong>異変の累積:</b> 異変は発見されない限り残り続け、同じカメラに複数の異変が発生することもあります。</li>
+            <li><strong>異変の累積:</strong> 異変は発見されない限り残り続け、同じカメラに複数の異変が発生することもあります。</li>
             <li><strong>ゲームオーバー:</strong> ライフが 0 になるとゲームオーバーです。</li>
             <li><strong>ゲームクリア:</strong> 10 ターン目を終えるとゲームクリアです。</li>
         </ul>
