@@ -24,11 +24,20 @@
             text-align: center;
             margin-bottom: 20px;
             display: none; /* 初期は非表示 */
+            position: relative; /* 子要素のabsolute配置の基準にする */
         }
-        #camera-info, #game-stats {
+        #camera-info {
             margin-bottom: 10px;
             font-size: 1.2em;
             color: #0f0;
+        }
+        #game-stats {
+            /* ライフとターン数をカメラ画像より下、操作説明より上に大きなフォントで表示 */
+            margin-top: 15px; /* canvasとの間に余白 */
+            margin-bottom: 20px; /* rules-containerとの間に余白 */
+            font-size: 2.2em; /* 大きなフォントに調整 */
+            color: #0f0;
+            text-shadow: 0 0 8px #0f0, 0 0 15px rgba(0, 255, 0, 0.5); /* 視認性向上の影 */
         }
         canvas {
             background-color: #000;
@@ -37,10 +46,22 @@
             margin: 0 auto 15px auto;
         }
         #message-area {
-            font-size: 1.1em;
+            /* メッセージをカメラ映像の前に大きく映し出されるように表示 */
+            position: absolute;
+            top: 50%; /* 垂直方向の中央 */
+            left: 50%; /* 水平方向の中央 */
+            transform: translate(-50%, -50%); /* 自身のサイズを考慮して完全に中央へ */
+            font-size: 3.5em; /* 大フォントに調整 */
             color: #ff0;
-            min-height: 2em;
-            margin-bottom: 15px;
+            min-height: auto; /* 高さを自動調整 */
+            width: 100%; /* 全幅を使う */
+            text-align: center; /* 中央揃え */
+            z-index: 10; /* キャンバスより手前に */
+            text-shadow: 0 0 10px black, 0 0 20px rgba(255, 255, 0, 0.5); /* 視認性向上の影 */
+            pointer-events: none; /* クリックイベントがメッセージを透過するように */
+            opacity: 0; /* 初期は非表示 */
+            transition: opacity 0.5s ease-out; /* フェードイン/アウト */
+            white-space: nowrap; /* テキストの折り返しを防ぐ */
         }
         #rules-container {
             background-color: #1a1a1a;
@@ -105,9 +126,10 @@
 
     <div id="game-container">
         <div id="camera-info">監視カメラ 1</div>
-        <div id="game-stats">ライフ: 20 | ターン: 1</div>
-        <canvas id="gameCanvas" width="800" height="600"></canvas>
         <div id="message-area"></div>
+        <canvas id="gameCanvas" width="800" height="600"></canvas>
+        <!-- ライフとターン数はカメラ画像より下、操作説明より上に表示されるようHTML構造とCSSを修正 -->
+        <div id="game-stats">ライフ: 20 | ターン: 1</div>
     </div>
 
     <div id="rules-container">
@@ -213,15 +235,144 @@
 
         // オブジェクトの基本定義
         const OBJECT_TYPES = [
-            { name: "テーブル", draw: (ctx, bounds) => { ctx.rect(bounds.x, bounds.y + bounds.height * 0.2, bounds.width, bounds.height * 0.8); ctx.rect(bounds.x + bounds.width * 0.1, bounds.y, bounds.width * 0.8, bounds.height * 0.2); } },
-            { name: "椅子", draw: (ctx, bounds) => { ctx.rect(bounds.x, bounds.y, bounds.width, bounds.height); ctx.rect(bounds.x + bounds.width * 0.1, bounds.y - bounds.height * 0.3, bounds.width * 0.8, bounds.height * 0.3); } },
-            { name: "花瓶", draw: (ctx, bounds) => { ctx.beginPath(); ctx.moveTo(bounds.x + bounds.width / 2, bounds.y); ctx.lineTo(bounds.x + bounds.width * 0.1, bounds.y + bounds.height); ctx.lineTo(bounds.x + bounds.width * 0.9, bounds.y + bounds.height); ctx.closePath(); } },
-            { name: "積み木", draw: (ctx, bounds) => { ctx.rect(bounds.x, bounds.y, bounds.width, bounds.height); } },
-            { name: "ボール", draw: (ctx, bounds) => { ctx.arc(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2, bounds.width / 2, 0, Math.PI * 2); } },
-            { name: "ベッド", draw: (ctx, bounds) => { ctx.rect(bounds.x, bounds.y, bounds.width, bounds.height); ctx.rect(bounds.x + bounds.width * 0.05, bounds.y + bounds.height * 0.05, bounds.width * 0.9, bounds.height * 0.9); } },
-            { 
-                name: "男の人", 
-                draw: (ctx, bounds, objData) => { // boundsは相対座標(x:-width/2, y:-height/2)を持っています
+            {
+                name: "テーブル",
+                draw: (ctx, bounds) => {
+                    // 天板
+                    ctx.rect(bounds.x, bounds.y, bounds.width, bounds.height * 0.2);
+                    // 左脚
+                    ctx.rect(bounds.x + bounds.width * 0.1, bounds.y + bounds.height * 0.2, bounds.width * 0.1, bounds.height * 0.8);
+                    // 右脚
+                    ctx.rect(bounds.x + bounds.width * 0.8, bounds.y + bounds.height * 0.2, bounds.width * 0.1, bounds.height * 0.8);
+                }
+            },
+            {
+                name: "椅子",
+                draw: (ctx, bounds) => {
+                    // 座面
+                    ctx.rect(bounds.x + bounds.width * 0.1, bounds.y + bounds.height * 0.4, bounds.width * 0.7, bounds.height * 0.2);
+                    // 背もたれ
+                    ctx.rect(bounds.x + bounds.width * 0.7, bounds.y + bounds.height * 0.1, bounds.width * 0.1, bounds.height * 0.5);
+                    // 左前脚
+                    ctx.rect(bounds.x + bounds.width * 0.1, bounds.y + bounds.height * 0.6, bounds.width * 0.1, bounds.height * 0.4);
+                    // 右前脚
+                    ctx.rect(bounds.x + bounds.width * 0.6, bounds.y + bounds.height * 0.6, bounds.width * 0.1, bounds.height * 0.4);
+                }
+            },
+            {
+                name: "花瓶",
+                draw: (ctx, bounds) => {
+                    // bounds.xとbounds.yは既にctx.translateによって-width/2と-height/2になっている。
+                    // そのため、0,0がオブジェクトの中心となる。
+                    const objWidth = bounds.width;
+                    const objHeight = bounds.height;
+                    const neckWidth = objWidth * 0.3;
+                    const bodyWidth = objWidth * 0.9;
+                    const bodyYStart = -objHeight / 2 + objHeight * 0.3; // 胴体の一番上のY座標
+                    const bodyYEnd = objHeight / 2; // 胴体の一番下のY座標
+                    const topY = -objHeight / 2;
+
+                    ctx.beginPath();
+                    // 首の右側から胴体へ
+                    ctx.moveTo(neckWidth / 2, topY);
+                    ctx.bezierCurveTo(
+                        neckWidth / 2 + objWidth * 0.1, topY + objHeight * 0.1,
+                        bodyWidth / 2, bodyYStart - objHeight * 0.1,
+                        bodyWidth / 2, bodyYStart
+                    );
+
+                    // 胴体の右側面から下部へ
+                    ctx.bezierCurveTo(
+                        bodyWidth / 2, bodyYStart + objHeight * 0.6,
+                        bodyWidth * 0.4, bodyYEnd,
+                        0, bodyYEnd // 胴体下部中央
+                    );
+
+                    // 胴体の左側面から上部へ
+                    ctx.bezierCurveTo(
+                        -bodyWidth * 0.4, bodyYEnd,
+                        -bodyWidth / 2, bodyYStart + objHeight * 0.6,
+                        -bodyWidth / 2, bodyYStart
+                    );
+
+                    // 胴体上部から首の左側へ
+                    ctx.bezierCurveTo(
+                        -bodyWidth / 2, bodyYStart - objHeight * 0.1,
+                        -neckWidth / 2 - objWidth * 0.1, topY + objHeight * 0.1,
+                        -neckWidth / 2, topY
+                    );
+                    ctx.closePath(); // 花瓶の本体のパスを閉じる
+
+                    ctx.fill(); // 本体を塗りつぶし
+                    ctx.stroke(); // 本体を線で描画
+
+                    // ハンドルを別途描画
+                    ctx.beginPath();
+                    const handleRadius = objWidth * 0.15;
+                    const handleCenterY = 0; // オブジェクトの中心がY軸の0
+                    const handleOffsetX = objWidth * 0.05; // 胴体からのオフセット
+
+                    // 右ハンドル
+                    ctx.arc(bodyWidth / 2 + handleRadius - handleOffsetX, handleCenterY, handleRadius, Math.PI * 0.7, Math.PI * 0.3, false); // 外側の弧
+                    ctx.arc(bodyWidth / 2 + handleRadius - handleOffsetX, handleCenterY, handleRadius * 0.6, Math.PI * 0.3, Math.PI * 0.7, true); // 内側の弧
+                    ctx.closePath();
+
+                    // 左ハンドル
+                    ctx.moveTo(-bodyWidth / 2 - handleRadius + handleOffsetX + handleRadius, handleCenterY); // 左ハンドルの開始点に移動
+                    ctx.arc(-bodyWidth / 2 - handleRadius + handleOffsetX, handleCenterY, handleRadius, Math.PI * 0.3, Math.PI * 0.7, false); // 外側の弧
+                    ctx.arc(-bodyWidth / 2 - handleRadius + handleOffsetX, handleCenterY, handleRadius * 0.6, Math.PI * 0.7, Math.PI * 0.3, true); // 内側の弧
+                    ctx.closePath();
+
+                    ctx.fill(); // ハンドルを塗りつぶし
+                    ctx.stroke(); // ハンドルを線で描画
+                }
+            },
+            {
+                name: "積み木",
+                draw: (ctx, bounds) => {
+                    // 左下ブロック (家本体)
+                    ctx.rect(bounds.x + bounds.width * 0.1, bounds.y + bounds.height * 0.5, bounds.width * 0.4, bounds.height * 0.5);
+                    // 真ん中ブロック (家の上)
+                    ctx.rect(bounds.x + bounds.width * 0.2, bounds.y + bounds.height * 0.3, bounds.width * 0.2, bounds.height * 0.2);
+                    // 屋根
+                    ctx.moveTo(bounds.x + bounds.width * 0.1, bounds.y + bounds.height * 0.3);
+                    ctx.lineTo(bounds.x + bounds.width * 0.3, bounds.y);
+                    ctx.lineTo(bounds.x + bounds.width * 0.5, bounds.y + bounds.height * 0.3);
+                    ctx.closePath();
+                    // 右側の縦長ブロック
+                    ctx.rect(bounds.x + bounds.width * 0.6, bounds.y + bounds.height * 0.4, bounds.width * 0.3, bounds.height * 0.6);
+                }
+            },
+            {
+                name: "ボール",
+                draw: (ctx, bounds) => {
+                    const centerX = bounds.x + bounds.width / 2;
+                    const centerY = bounds.y + bounds.height / 2;
+                    const outerRadius = bounds.width / 2;
+                    const innerRadius = bounds.width * 0.3; // 外円の6割程度の半径
+
+                    // 外側の円
+                    ctx.arc(centerX, centerY, outerRadius, 0, Math.PI * 2);
+                    // 内側の円
+                    ctx.arc(centerX, centerY, innerRadius, 0, Math.PI * 2);
+                }
+            },
+            {
+                name: "ベッド",
+                draw: (ctx, bounds) => {
+                    // マットレス部分
+                    ctx.rect(bounds.x, bounds.y + bounds.height * 0.4, bounds.width, bounds.height * 0.4);
+                    // ヘッドボード
+                    ctx.rect(bounds.x, bounds.y, bounds.width * 0.15, bounds.height * 0.6);
+                    // 左脚
+                    ctx.rect(bounds.x + bounds.width * 0.1, bounds.y + bounds.height * 0.8, bounds.width * 0.05, bounds.height * 0.2);
+                    // 右脚
+                    ctx.rect(bounds.x + bounds.width * 0.85, bounds.y + bounds.height * 0.8, bounds.width * 0.05, bounds.height * 0.2);
+                }
+            },
+            {
+                name: "男の人",
+                draw: (ctx, bounds, objData) => {
                     const headCenterY = bounds.y + bounds.height * 0.2;
                     const headRadius = bounds.width * 0.3;
                     const bodyX = bounds.x + bounds.width * 0.3;
@@ -231,10 +382,10 @@
 
                     ctx.beginPath();
                     // 頭部（相対座標の原点x=0、headCenterYに中心を持つ）
-                    ctx.arc(0, headCenterY, headRadius, 0, Math.PI * 2); 
+                    ctx.arc(0, headCenterY, headRadius, 0, Math.PI * 2);
                     // 胴体（boundsの左上隅を基準に描画）
                     ctx.rect(bodyX, bodyY, bodyWidth, bodyHeight);
-                    
+
                     // 胴体と頭部を塗りつぶし、線を描画
                     ctx.fill();
                     ctx.stroke();
@@ -244,18 +395,18 @@
                         ctx.fillStyle = '#eee'; // 目の色
                         ctx.strokeStyle = '#eee'; // 口の線の色
                         ctx.lineWidth = 1; // 口の線の太さ
-                        
+
                         const eyeRadius = headRadius * 0.1;
-                        const eyeXOffset = headRadius * 0.3; 
-                        const eyeY = headCenterY - headRadius * 0.1; 
+                        const eyeXOffset = headRadius * 0.3;
+                        const eyeY = headCenterY - headRadius * 0.1;
 
                         // 左目
                         ctx.beginPath();
-                        ctx.arc(-eyeXOffset, eyeY, eyeRadius, 0, Math.PI * 2); 
+                        ctx.arc(-eyeXOffset, eyeY, eyeRadius, 0, Math.PI * 2);
                         ctx.fill();
                         // 右目
                         ctx.beginPath();
-                        ctx.arc(eyeXOffset, eyeY, eyeRadius, 0, Math.PI * 2); 
+                        ctx.arc(eyeXOffset, eyeY, eyeRadius, 0, Math.PI * 2);
                         ctx.fill();
 
                         // 笑顔の口
@@ -268,8 +419,8 @@
                     }
                 }
             },
-            { 
-                name: "女の人", 
+            {
+                name: "女の人",
                 draw: (ctx, bounds, objData) => {
                     const headCenterY = bounds.y + bounds.height * 0.2;
                     const headRadius = bounds.width * 0.3;
@@ -282,14 +433,14 @@
 
                     ctx.beginPath();
                     // 頭部
-                    ctx.arc(0, headCenterY, headRadius, 0, Math.PI * 2); 
+                    ctx.arc(0, headCenterY, headRadius, 0, Math.PI * 2);
                     // 胴体（ドレス状）
-                    ctx.moveTo(bodyTopX, bodyTopY); 
+                    ctx.moveTo(bodyTopX, bodyTopY);
                     ctx.lineTo(bodyBottomLeftX, bodyBottomY);
                     ctx.lineTo(bodyBottomRightX, bodyBottomY);
                     ctx.lineTo(bodyTopRightX, bodyTopY);
                     ctx.closePath();
-                    
+
                     ctx.fill();
                     ctx.stroke();
 
@@ -298,7 +449,7 @@
                         ctx.fillStyle = '#eee';
                         ctx.strokeStyle = '#eee';
                         ctx.lineWidth = 1;
-                        
+
                         const eyeRadius = headRadius * 0.1;
                         const eyeXOffset = headRadius * 0.3;
                         const eyeY = headCenterY - headRadius * 0.1;
@@ -318,8 +469,8 @@
                     }
                 }
             },
-            { 
-                name: "子ども", 
+            {
+                name: "子ども",
                 draw: (ctx, bounds, objData) => {
                     const headCenterY = bounds.y + bounds.height * 0.2;
                     const headRadius = bounds.width * 0.25;
@@ -330,10 +481,10 @@
 
                     ctx.beginPath();
                     // 頭部
-                    ctx.arc(0, headCenterY, headRadius, 0, Math.PI * 2); 
+                    ctx.arc(0, headCenterY, headRadius, 0, Math.PI * 2);
                     // 胴体
                     ctx.rect(bodyX, bodyY, bodyWidth, bodyHeight);
-                    
+
                     ctx.fill();
                     ctx.stroke();
 
@@ -342,7 +493,7 @@
                         ctx.fillStyle = '#eee';
                         ctx.strokeStyle = '#eee';
                         ctx.lineWidth = 1;
-                        
+
                         const eyeRadius = headRadius * 0.1;
                         const eyeXOffset = headRadius * 0.3;
                         const eyeY = headCenterY - headRadius * 0.1;
@@ -404,7 +555,7 @@
             }
 
             document.querySelectorAll('.game-over-screen, .game-clear-screen').forEach(el => el.remove());
-            messageAreaDiv.textContent = "";
+            messageAreaDiv.textContent = ""; // ゲーム開始時にメッセージエリアをクリア
             difficultySelectionScreen.style.display = 'none';
             gameContainer.style.display = 'flex'; // ゲーム画面を表示
 
@@ -539,6 +690,17 @@
             }
             drawCameraView();
             // ゲーム終了判定は `checkGameStatus` で行う
+        }
+
+        // メッセージを画面中央に大きく表示する関数
+        function showMessage(text, duration = 2000) {
+            messageAreaDiv.textContent = text;
+            messageAreaDiv.style.opacity = 1;
+            setTimeout(() => {
+                messageAreaDiv.style.opacity = 0;
+                // フェードアウト完了後、textContentをクリアしてDOMからテキストをなくす
+                setTimeout(() => { messageAreaDiv.textContent = ""; }, 500); // CSSのtransition durationと合わせる
+            }, duration);
         }
 
         // 異変の発生判定と作成
@@ -715,7 +877,7 @@
         // 異変を解消する
         function resolveAnomaly(obj, room) {
             if (obj.isAnomaly) {
-                messageAreaDiv.textContent = "異変を発見しました！";
+                showMessage("異変を発見した！"); // メッセージ表示をshowMessageに変更
                 obj.isAnomaly = false;
                 obj.missedCount = 0; // 解消されたので見逃しカウントをリセット
                 obj.anomaliesApplied = []; // 適用された異変の履歴もクリア
@@ -767,7 +929,7 @@
         function loseLife(amount, reason) {
             currentLife -= amount;
             if (currentLife < 0) currentLife = 0;
-            messageAreaDiv.textContent = reason;
+            showMessage(reason); // メッセージ表示をshowMessageに変更
             checkGameStatus();
         }
 
@@ -833,7 +995,7 @@
 
             if (e.code === 'Space') {
                 e.preventDefault(); // スクロール防止
-                messageAreaDiv.textContent = ""; // メッセージクリア
+                messageAreaDiv.textContent = ""; // スペースキーでカメラを切り替える際に既存のメッセージを即座にクリア
 
                 // 前のカメラで異変を見逃していないかチェック
                 const prevCameraRoom = rooms[currentCameraIndex];
